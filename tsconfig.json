@@ -1,0 +1,17 @@
+{
+    "extends": "@diia-inhouse/configs/tsconfig",
+    "compilerOptions": {
+        "outDir": "dist",
+        "declarationDir": "dist/types",
+        "baseUrl": "./",
+        "paths": {
+            "@services/*": ["src/services/*"],
+            "@interfaces/*": ["src/interfaces/*"],
+            "@src/*": ["src/*"],
+            "@tests/*": ["tests/*"]
+        },
+        "strict": false
+    },
+    "include": ["src/**/*", "*.ts"],
+    "exclude": ["node_modules", "test"]
+}

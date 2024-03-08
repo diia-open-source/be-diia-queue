@@ -1,0 +1,43 @@
+export enum InternalQueueName {
+    QueueAuth = 'QueuAuth',
+    QueueDamagedProperty = 'QueueDamagedProperty',
+    QueueDepositGuaranteePayments = 'QueueDepositGuaranteePayments',
+    QueueDocuments = 'QueueDocuments',
+    QueueDocumentAcquirers = 'QueueDocumentAcquirers',
+    QueueDocumentDelivery = 'QueueDocumentDelivery',
+    QueueNotification = 'QueueNotification',
+    QueuePartner = 'QueuePartner',
+    QueuePayment = 'QueuePayment',
+    QueuePublicService = 'QueuePublicService',
+    QueueResidenceRegistration = 'QueueResidenceRegistration',
+    QueueVehicleReRegistration = 'QueueVehicleReRegistration',
+    QueueUser = 'QueueUser',
+    QueueSseAdapter = 'QueueSseAdapter',
+    QueueVote = 'QueueVote',
+    QueueAnalytics = 'QueueAnalytics',
+    QueueCriminalCert = 'QueueCriminalCert',
+    QueueInvincibility = 'QueueInvincibility',
+}
+
+export enum ScheduledTaskQueueName {
+    ScheduledTasksQueueAuth = 'ScheduledTasksQueueAuth',
+    ScheduledTasksQueueDamagedProperty = 'ScheduledTasksQueueDamagedProperty',
+    ScheduledTasksQueueDepositGuaranteePayments = 'ScheduledTasksQueueDepositGuaranteePayments',
+    ScheduledTasksQueueDocuments = 'ScheduledTasksQueueDocuments',
+    ScheduledTasksQueueGateway = 'ScheduledTasksQueueGateway',
+    ScheduledTasksQueuePartner = 'ScheduledTasksQueuePartner',
+    ScheduledTasksQueuePayment = 'ScheduledTasksQueuePayment',
+    ScheduledTasksQueuePublicService = 'ScheduledTasksQueuePublicService',
+    ScheduledTasksQueueCriminalCert = 'ScheduledTasksQueueCriminalCert',
+    ScheduledTasksQueueReportService = 'ScheduledTasksQueueReportService',
+    ScheduledTasksQueueResidenceRegistration = 'ScheduledTasksQueueResidenceRegistration',
+    ScheduledTasksQueueVehicleReRegistration = 'ScheduledTasksQueueVehicleReRegistration',
+    ScheduledTasksQueueInvincibility = 'ScheduledTasksQueueInvincibility',
+    ScheduledTasksQueueNotification = 'ScheduledTasksQueueNotification',
+    ScheduledTasksQueueDocumentAcquirers = 'ScheduledTasksQueueDocumentAcquirers',
+    ScheduledTasksQueueUser = 'ScheduledTasksQueueUser',
+    ScheduledTasksQueueAddress = 'ScheduledTasksQueueAddress',
+    ScheduledTasksQueueDocumentDelivery = 'ScheduledTasksQueueDocumentDelivery',
+}
+
+export type QueueName = InternalQueueName | ScheduledTaskQueueName
