@@ -26,7 +26,7 @@ This repository contains the package which provides queue functionality.
 Example:
 
 ```
-git clone https://github.com/diia-open-source/diia-queue.git
+git clone https://github.com/diia-open-source/be-diia-queue.git diia-queue
 ```
 
 ---
