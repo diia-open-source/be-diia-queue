@@ -63,7 +63,8 @@
         "lockfile-lint": "4.12.1",
         "madge": "6.1.0",
         "protobufjs": "7.2.5",
-        "type-fest": "4.8.2"
+        "type-fest": "^4.8.1",
+        "typescript": "5.3.3"
     },
     "release": {
         "extends": "@diia-inhouse/configs/dist/semantic-release/package"
