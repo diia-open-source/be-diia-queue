@@ -1,4 +1,4 @@
-import { v4 as uuid } from 'uuid'
+import { randomUUID as uuid } from 'node:crypto'
 
 import { ExternalCommunicatorError } from '@diia-inhouse/errors'
 import { PubSubService } from '@diia-inhouse/redis'

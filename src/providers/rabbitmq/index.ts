@@ -2,7 +2,7 @@ import { type AsyncLocalStorage } from 'async_hooks'
 import { EventEmitter } from 'events'
 
 import { isEmpty, merge } from 'lodash'
-import { v4 } from 'uuid'
+import { randomUUID as uuid } from 'node:crypto'
 
 import { Logger } from '@diia-inhouse/types'
 
@@ -334,7 +334,7 @@ export class RabbitMQProvider extends EventEmitter {
 
     private preparePublisherHeaders(): MessageHeaders {
         const logData = this.asyncLocalStorage?.getStore()?.logData ?? {}
-        const traceId = logData?.traceId ?? v4()
+        const traceId = logData?.traceId ?? uuid()
         const serviceCode = logData?.serviceCode
 
         return { traceId, serviceCode }

@@ -1,7 +1,7 @@
 import { EventEmitter } from 'events'
 
 import { Channel, Options, Replies } from 'amqplib'
-import { v4 as uuid } from 'uuid'
+import { randomUUID as uuid } from 'node:crypto'
 
 import { Logger } from '@diia-inhouse/types'
 
