@@ -1,7 +1,7 @@
 import { AsyncLocalStorage } from 'async_hooks'
 
 import { isValidTraceId, trace } from '@opentelemetry/api'
-import { v4 as uuid } from 'uuid'
+import { randomUUID as uuid } from 'node:crypto'
 
 import { ValidationError } from '@diia-inhouse/errors'
 import { PubSubService } from '@diia-inhouse/redis'
