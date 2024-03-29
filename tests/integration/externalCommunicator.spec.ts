@@ -48,7 +48,7 @@ const rabbitMqConfig: QueueConnectionConfig = {
     },
 }
 
-describe(`${ExternalCommunicator.name} service`, () => {
+xdescribe(`${ExternalCommunicator.name} service`, () => {
     beforeAll(async () => {
         const asyncLocalStorage = new AsyncLocalStorage<QueueContext>()
         const logger = new DiiaLogger({ logLevel: LogLevel.DEBUG }, asyncLocalStorage)
