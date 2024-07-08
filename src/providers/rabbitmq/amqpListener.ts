@@ -3,19 +3,15 @@ import { Channel, ConsumeMessage, Message, Options, Replies } from 'amqplib'
 import { Logger } from '@diia-inhouse/types'
 
 import constants from '../../constants'
-import { ConnectionStatus, ListenerOptions, QueueMessage, QueueMessageData } from '../../interfaces'
+import { ListenerOptions } from '../../interfaces/options'
+import { QueueMessage, QueueMessageData } from '../../interfaces/providers/rabbitmq'
+import { ConnectionStatus } from '../../interfaces/providers/rabbitmq/amqpConnection'
 import { QueueCallback, QueueChannelAndOptions } from '../../interfaces/providers/rabbitmq/amqpListener'
 import { totalListenerChannelErrorsMetric } from '../../metrics'
 
 import { AmqpConnection } from './amqpConnection'
 
-const defaultQueueOptions: Options.AssertQueue = {
-    durable: false,
-}
-
 export class AmqpListener {
-    private prefetchCount: number
-
     private queuesChannels: Map<string, QueueChannelAndOptions> = new Map()
 
     private queueCallback: Map<string, QueueCallback> = new Map()
@@ -23,10 +19,8 @@ export class AmqpListener {
     constructor(
         private connection: AmqpConnection,
         private readonly logger: Logger,
-        options?: ListenerOptions,
-    ) {
-        this.prefetchCount = options?.prefetchCount || 1
-    }
+        private readonly options?: ListenerOptions,
+    ) {}
 
     async init(): Promise<void> {
         this.connection.on('ready', async () => {
@@ -44,7 +38,7 @@ export class AmqpListener {
     async listenQueue(
         queueName: string,
         callback: QueueCallback,
-        queueOptions: Options.AssertQueue = defaultQueueOptions,
+        queueOptions: Options.AssertQueue = this.options?.queueOptions ?? { durable: false },
     ): Promise<void | never> {
         this.logger.debug(`Start listen queue [${queueName}]`)
 
@@ -87,10 +81,10 @@ export class AmqpListener {
     }
 
     private async createChannelAndListenQueue(queueName: string, queueOptions: Options.AssertQueue): Promise<void> {
-        const channel = await this.connection.createChannel()
+        const channel = await this.connection.createChannel(queueName)
 
         await channel.assertQueue(queueName, queueOptions)
-        await this.setPrefetchCount(channel)
+        await channel.prefetch(this.options?.prefetchCount ?? 1)
 
         const callback = this.getQueueCallback(queueName)
 
@@ -109,10 +103,6 @@ export class AmqpListener {
         })
     }
 
-    private async setPrefetchCount(channel: Channel): Promise<Replies.Empty> {
-        return await channel.prefetch(this.prefetchCount)
-    }
-
     private saveQueueCallback(queueName: string, callback: QueueCallback): void {
         this.queueCallback.set(queueName, callback)
     }
@@ -124,7 +114,7 @@ export class AmqpListener {
 
             this.logger.error(errMsg)
 
-            throw new Error()
+            throw new Error('Error')
         }
 
         return callback
@@ -137,7 +127,7 @@ export class AmqpListener {
 
             this.logger.error(errMsg)
 
-            throw new Error()
+            throw new Error('Error')
         }
 
         return channel
@@ -150,7 +140,7 @@ export class AmqpListener {
 
             this.logger.error(errMsg)
 
-            throw new Error()
+            throw new Error('Error')
         }
 
         return queueOptions

@@ -1,4 +1,4 @@
-import { AsyncLocalStorage } from 'async_hooks'
+import { AsyncLocalStorage } from 'node:async_hooks'
 
 import { HealthCheckResult, HttpStatusCode, Logger, OnHealthCheck } from '@diia-inhouse/types'
 
@@ -6,7 +6,6 @@ import { ConnectionStatus, QueueConnectionConfig, QueueContext } from '../interf
 import { QueueConfigType } from '../interfaces/queueConfig'
 import { QueueStatus } from '../interfaces/queueStatus'
 import { RabbitMQProvider } from '../providers/rabbitmq'
-import * as Utils from '../utils'
 
 export class Queue implements OnHealthCheck {
     private internalQueue: RabbitMQProvider
@@ -25,9 +24,7 @@ export class Queue implements OnHealthCheck {
         const internalQueueStatus = this.internalQueue?.getStatus()
         const externalQueueStatus = this.externalQueue?.getStatus()
 
-        const queueStatuses = [internalQueueStatus, externalQueueStatus]
-            .filter((status) => status)
-            .flatMap((status) => Object.values(status))
+        const queueStatuses = [internalQueueStatus, externalQueueStatus].filter(Boolean).flatMap((status) => Object.values(status))
 
         const status: HttpStatusCode = queueStatuses.some((s) => s !== ConnectionStatus.Connected)
             ? HttpStatusCode.SERVICE_UNAVAILABLE
@@ -49,18 +46,22 @@ export class Queue implements OnHealthCheck {
             return this.internalQueue
         }
 
-        const { internal } = this.connectionConfig
-        const { serviceConfig, queueConfig, topicConfig } = Utils.validateAndGetQueueConfigs(this.serviceName, QueueConfigType.Internal)
+        const {
+            internal,
+            serviceRulesConfig: { queuesConfig, servicesConfig, topicsConfig, internalEvents },
+        } = this.connectionConfig
 
         this.internalQueue = new RabbitMQProvider(
             this.serviceName,
             internal,
-            serviceConfig,
-            topicConfig,
+            servicesConfig[QueueConfigType.Internal],
+            topicsConfig[QueueConfigType.Internal],
+            [],
+            internalEvents,
             QueueConfigType.Internal,
             this.logger,
             this.asyncLocalStorage,
-            queueConfig,
+            queuesConfig[QueueConfigType.Internal],
         )
 
         return this.internalQueue
@@ -71,18 +72,18 @@ export class Queue implements OnHealthCheck {
             return this.externalQueue
         }
 
-        const { external, localServiceConfig } = this.connectionConfig
-        const { serviceConfig, topicConfig } = Utils.validateAndGetQueueConfigs(
-            this.serviceName,
-            QueueConfigType.External,
-            localServiceConfig,
-        )
+        const {
+            external,
+            serviceRulesConfig: { portalEvents, servicesConfig, topicsConfig, internalEvents },
+        } = this.connectionConfig
 
         this.externalQueue = new RabbitMQProvider(
             this.serviceName,
             external,
-            serviceConfig,
-            topicConfig,
+            servicesConfig[QueueConfigType.External],
+            topicsConfig[QueueConfigType.External],
+            portalEvents,
+            internalEvents,
             QueueConfigType.External,
             this.logger,
             this.asyncLocalStorage,

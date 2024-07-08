@@ -1,6 +1,4 @@
-import { PublicServiceCode } from '@diia-inhouse/types'
-
-import { PublishOptions } from '../../index'
+import { PublishDirectOptions } from '../../options'
 import { EventName } from '../../queueConfig'
 
 export enum ExchangeType {
@@ -15,7 +13,7 @@ export type MessagePayload = unknown
 
 export interface MessageHeaders {
     traceId: string
-    serviceCode?: PublicServiceCode
+    serviceCode?: string
     'x-delay'?: number
 }
 
@@ -26,5 +24,5 @@ export interface PublishToExchangeParams {
     routingKey?: string
     responseRoutingKey?: string
     headers: MessageHeaders
-    options?: PublishOptions
+    options?: PublishDirectOptions
 }

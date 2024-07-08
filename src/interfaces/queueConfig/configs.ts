@@ -1,6 +1,8 @@
-import { EventName, ExternalEvent } from './events'
-import { QueueName } from './queues'
-import { InternalTopic, Topic } from './topics'
+export type EventName = string
+
+export type QueueName = string
+
+export type Topic = string
 
 export enum QueueConfigType {
     Internal = 'internal',
@@ -9,19 +11,19 @@ export enum QueueConfigType {
 
 export interface InternalServiceConfig {
     subscribe?: QueueName[]
-    publish?: InternalTopic[]
+    publish?: Topic[]
 }
 
 export interface ExternalServiceConfig {
-    publish: ExternalEvent[]
-    subscribe: ExternalEvent[]
+    publish: EventName[]
+    subscribe: EventName[]
 }
 
 export type ServiceConfigByConfigType = InternalServiceConfig | ExternalServiceConfig
 
 export interface ServiceConfig {
-    [QueueConfigType.Internal]: Record<string, InternalServiceConfig>
-    [QueueConfigType.External]: Record<string, ExternalServiceConfig>
+    [QueueConfigType.Internal]: InternalServiceConfig
+    [QueueConfigType.External]: ExternalServiceConfig
 }
 
 export type QueueConfigByQueueName = {
@@ -39,3 +41,11 @@ export type TopicConfigByConfigType = {
 }
 
 export type TopicConfig = Record<QueueConfigType, TopicConfigByConfigType>
+
+export type ServiceRulesConfig = {
+    servicesConfig: ServiceConfig
+    topicsConfig: TopicConfig
+    queuesConfig: QueueConfig
+    portalEvents: EventName[]
+    internalEvents: EventName[]
+}

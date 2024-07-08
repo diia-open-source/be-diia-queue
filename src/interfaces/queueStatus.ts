@@ -1,6 +1,9 @@
 import { RabbitMQStatus } from './providers/rabbitmq'
 
-import { QueueConnectionType } from '.'
+export enum QueueConnectionType {
+    Internal = 'internal',
+    External = 'external',
+}
 
 export type QueueStatusByType = Partial<Record<QueueConnectionType, RabbitMQStatus>>
 

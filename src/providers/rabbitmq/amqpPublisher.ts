@@ -1,20 +1,22 @@
-import { EventEmitter } from 'events'
+import { randomUUID } from 'node:crypto'
+import { EventEmitter } from 'node:events'
 
 import { Channel, Options, Replies } from 'amqplib'
-import { v4 as uuid } from 'uuid'
 
 import { Logger } from '@diia-inhouse/types'
 
 import constants from '../../constants'
-import { ConnectionStatus, ExchangeType, PublishOptions, QueueMessageData } from '../../interfaces'
-import { MessageHeaders, PublishToExchangeParams } from '../../interfaces/providers/rabbitmq/amqpPublisher'
+import { PublishExternalEventOptions } from '../../interfaces/options'
+import { QueueMessageData } from '../../interfaces/providers/rabbitmq'
+import { ConnectionStatus } from '../../interfaces/providers/rabbitmq/amqpConnection'
+import { ExchangeType, MessageHeaders, PublishToExchangeParams } from '../../interfaces/providers/rabbitmq/amqpPublisher'
 
 import { AmqpConnection } from './amqpConnection'
 
-const { APP_ID } = constants
+const { APP_ID, DEFAULT_ROUTING_KEY } = constants
 
 export class AmqpPublisher {
-    readonly defaultExchangeType: ExchangeType = ExchangeType.Topic
+    readonly defaultExchangeType = ExchangeType.Topic
 
     private channel: Channel
 
@@ -41,11 +43,14 @@ export class AmqpPublisher {
     }
 
     private async createChannel(): Promise<void> {
-        this.channel = await this.connection.createChannel()
+        const queueName = 'amq.rabbitmq.reply-to'
+
+        this.channel = await this.connection.createChannel(queueName)
+        // eslint-disable-next-line unicorn/prefer-event-target
         this.eventEmitter = new EventEmitter()
         this.eventEmitter.setMaxListeners(0)
         await this.channel.consume(
-            'amq.rabbitmq.reply-to',
+            queueName,
             (msg) => {
                 this.eventEmitter.emit(msg.properties.correlationId, JSON.parse(msg.content.toString('utf8')))
             },
@@ -54,15 +59,8 @@ export class AmqpPublisher {
     }
 
     async publishToExchange(params: PublishToExchangeParams): Promise<boolean> {
-        const {
-            eventName,
-            message,
-            exchangeName,
-            routingKey = constants.DEFAULT_ROUTING_KEY,
-            responseRoutingKey,
-            headers,
-            options,
-        } = params
+        const { eventName, message, exchangeName, routingKey = DEFAULT_ROUTING_KEY, responseRoutingKey, headers, options } = params
+
         if (!eventName || !exchangeName || !message) {
             this.logger.error(
                 `Invalid event name [${eventName}] or exchange name [${exchangeName}] or message [${JSON.stringify(message)}]`,
@@ -71,27 +69,20 @@ export class AmqpPublisher {
             return false
         }
 
-        const eventMessage: QueueMessageData = AmqpPublisher.prepareQueueMessageData(eventName, responseRoutingKey, message, options)
+        const eventMessage = AmqpPublisher.prepareQueueMessageData(eventName, responseRoutingKey, message, options)
 
         return await this.publish(eventMessage, exchangeName, routingKey, headers)
     }
 
     async publishToExchangeDirect<T>(params: PublishToExchangeParams): Promise<T> {
-        const {
-            eventName,
-            message,
-            exchangeName,
-            routingKey = constants.DEFAULT_ROUTING_KEY,
-            responseRoutingKey,
-            headers,
-            options,
-        } = params
-        const timeout: number = options?.timeout || this.timeout
+        const { eventName, message, exchangeName, routingKey = DEFAULT_ROUTING_KEY, responseRoutingKey, headers, options } = params
+
+        const timeout = options?.timeout || this.timeout
         if (!eventName || !exchangeName || !message) {
-            throw Error(`Invalid event name [${eventName}] or exchange name [${exchangeName}] or message [${JSON.stringify(message)}]`)
+            throw new Error(`Invalid event name [${eventName}] or exchange name [${exchangeName}] or message [${JSON.stringify(message)}]`)
         }
 
-        const eventMessage: QueueMessageData = AmqpPublisher.prepareQueueMessageData(eventName, responseRoutingKey, message, options)
+        const eventMessage = AmqpPublisher.prepareQueueMessageData(eventName, responseRoutingKey, message, options)
 
         return await this.publishDirect(eventMessage, exchangeName, routingKey, timeout, headers)
     }
@@ -100,7 +91,7 @@ export class AmqpPublisher {
         eventName: string,
         responseRoutingKey: string,
         message: unknown,
-        options?: PublishOptions,
+        options?: PublishExternalEventOptions,
     ): QueueMessageData {
         const eventMessage: QueueMessageData = {
             event: eventName,
@@ -127,9 +118,10 @@ export class AmqpPublisher {
         timeoutMs: number,
         headers?: unknown,
     ): Promise<T> {
-        const correlationId = uuid()
+        const correlationId = randomUUID()
 
-        this.logger.io(`Publish direct event: ${eventMessage.event}`, { routingKey, eventMessage, correlationId })
+        this.logger.info(`Publish direct event: ${eventMessage.event}`, { routingKey, correlationId })
+        this.logger.io('Direct event message', eventMessage)
         const publishOptions = AmqpPublisher.defaultPublishOptions(headers)
 
         publishOptions.replyTo = 'amq.rabbitmq.reply-to'
@@ -161,7 +153,8 @@ export class AmqpPublisher {
     ): Promise<boolean> {
         const delay = headers?.['x-delay']
 
-        this.logger.io(`Publish event: ${eventMessage.event}`, { routingKey, eventMessage, delay })
+        this.logger.info(`Publish event: ${eventMessage.event}`, { routingKey, delay })
+        this.logger.io('Event message', eventMessage)
         const publishOptions = AmqpPublisher.defaultPublishOptions(headers)
 
         return this.channel.publish(exchangeName, routingKey, Buffer.from(JSON.stringify(eventMessage)), publishOptions)
@@ -169,6 +162,7 @@ export class AmqpPublisher {
 
     private static defaultPublishOptions(headers?: unknown): Options.Publish {
         return {
+            // eslint-disable-next-line unicorn/text-encoding-identifier-case
             contentEncoding: 'utf-8',
             contentType: 'application/json',
             // if true, the message will be returned if it is not routed to a queue

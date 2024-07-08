@@ -1,11 +1,10 @@
-import { randomUUID } from 'crypto'
+import { randomUUID } from 'node:crypto'
 
 import { QueueMessage } from '@interfaces/index'
-import { InternalEvent } from '@interfaces/queueConfig'
 
 export const validMessage: QueueMessage = {
     data: {
-        event: InternalEvent.AuthUserLogOut,
+        event: 'authUserLogOut',
         meta: {
             date: new Date(),
         },
@@ -18,6 +17,7 @@ export const validMessage: QueueMessage = {
     properties: {
         appId: randomUUID(),
         clusterId: randomUUID(),
+        // eslint-disable-next-line unicorn/text-encoding-identifier-case
         contentEncoding: 'utf-8',
         contentType: 'application/json',
         correlationId: randomUUID(),

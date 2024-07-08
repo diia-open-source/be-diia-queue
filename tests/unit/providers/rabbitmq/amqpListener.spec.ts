@@ -1,4 +1,5 @@
-import { EventEmitter } from 'events'
+/* eslint-disable unicorn/prefer-event-target */
+import { EventEmitter } from 'node:events'
 
 import { validMessage } from '../../../mocks/providers/rabbitmq/amqpListener'
 
@@ -133,7 +134,7 @@ describe('AmqpListener', () => {
         })
 
         it('should fail to bind queue to exchange in case channel does not exist', async () => {
-            const expectedError = new Error()
+            const expectedError = new Error('Error')
             const amqpConnection = <AmqpConnection>(<unknown>new Connection())
             const amqpListener = new AmqpListener(amqpConnection, logger)
 

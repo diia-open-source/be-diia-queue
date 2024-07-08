@@ -4,6 +4,8 @@ import { TaskListener } from '@interfaces/index'
 
 export type PromiseWithResolver = Promise<void> & { resolve?: () => void }
 
+let resolve: () => void = () => null
+
 export class TestTask implements TaskListener {
     promiseWithResolver: PromiseWithResolver | undefined
 
@@ -24,7 +26,6 @@ export class TestTask implements TaskListener {
             return this.promiseWithResolver
         }
 
-        let resolve: () => void = () => null
         const promise: PromiseWithResolver = new Promise((_resolve: () => void) => {
             resolve = _resolve
         })

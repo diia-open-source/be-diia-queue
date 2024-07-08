@@ -2,12 +2,13 @@ import { Logger } from '@diia-inhouse/types'
 import { ValidationSchema } from '@diia-inhouse/validators'
 
 import { EventBusListener, QueueMessageMetaData } from '@interfaces/index'
-import { ExternalEvent } from '@interfaces/queueConfig'
+import { EventName } from '@interfaces/queueConfig'
 
-export class UbkiCreditInfoEventListener implements EventBusListener {
-    constructor(private readonly logger: Logger) {}
-
-    readonly event: ExternalEvent = ExternalEvent.UbkiCreditInfo
+export class ReceiveEventListener implements EventBusListener {
+    constructor(
+        private readonly logger: Logger,
+        readonly event: EventName,
+    ) {}
 
     readonly isSync = true
 

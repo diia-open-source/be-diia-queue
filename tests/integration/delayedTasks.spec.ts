@@ -1,4 +1,4 @@
-import { AsyncLocalStorage } from 'async_hooks'
+import { AsyncLocalStorage } from 'node:async_hooks'
 
 import DiiaLogger from '@diia-inhouse/diia-logger'
 import { EnvService } from '@diia-inhouse/env'
@@ -8,12 +8,14 @@ import { AppValidator, ValidationSchema } from '@diia-inhouse/validators'
 
 import { EventMessageHandler, EventMessageValidator, ExternalCommunicatorChannel, Queue, Task } from '@services/index'
 
+import { connectOptions } from '@tests/mocks/services/queue'
 import { TestTask } from '@tests/mocks/tasks'
 
 import { QueueConnectionConfig, QueueConnectionType, QueueContext, TaskListener } from '@interfaces/index'
 
 describe('Delayed task', () => {
     const rabbitMqConfig: QueueConnectionConfig = {
+        serviceRulesConfig: connectOptions.serviceRulesConfig,
         [QueueConnectionType.Internal]: {
             connection: {
                 hostname: '127.0.0.1',

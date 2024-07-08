@@ -1,5 +1,5 @@
-import { EventEmitter } from 'events'
-import * as os from 'os'
+import { EventEmitter } from 'node:events'
+import * as os from 'node:os'
 
 import { Channel, Connection, Options, connect } from 'amqplib'
 
@@ -15,6 +15,7 @@ const defaultSocketOptions: SocketOptions = {
 
 const defaultReconnectTimeoutMs = 5000
 
+// eslint-disable-next-line unicorn/prefer-event-target
 export class AmqpConnection extends EventEmitter {
     private reconnectEnabled = false
 
@@ -76,8 +77,8 @@ export class AmqpConnection extends EventEmitter {
     /**
      * Create new channel
      */
-    async createChannel(): Promise<Channel> {
-        this.logger.info('Creating channel to RabbitMQ...')
+    async createChannel(queueName: string): Promise<Channel> {
+        this.logger.info('Creating channel to RabbitMQ...', { queueName })
         const channel: Channel = await this.connection.createChannel()
 
         channel.on('close', async () => {
@@ -88,7 +89,7 @@ export class AmqpConnection extends EventEmitter {
             this.logger.error('Channel on error', { err })
         })
 
-        this.logger.info('Channel to RabbitMQ is created')
+        this.logger.info('Channel to RabbitMQ is created', { queueName })
 
         return channel
     }

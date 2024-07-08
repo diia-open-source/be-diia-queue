@@ -1,9 +1,8 @@
 import { HttpStatusCode } from '@diia-inhouse/types'
 import { ValidationSchema } from '@diia-inhouse/validators'
 
-import { EventName, ExternalTopic } from './queueConfig'
-
-import { EventBusListener } from '.'
+import { EventBusListener } from './eventBus'
+import { EventName, Topic } from './queueConfig'
 
 export type EventListeners = Partial<Record<EventName, EventBusListener>>
 
@@ -16,7 +15,7 @@ export interface ReceiveOps {
 }
 
 export interface ReceiveDirectOps {
-    topic?: ExternalTopic
+    topic?: Topic
     validationRules?: ValidationSchema
     ignoreCache?: boolean
     retry?: boolean

@@ -17,7 +17,7 @@ export class Task implements TaskQueue, OnInit {
 
     async onInit(): Promise<void> {
         await this.queueProvider.init?.()
-        if (!this.taskList.length) {
+        if (this.taskList.length === 0) {
             return
         }
 

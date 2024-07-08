@@ -65,29 +65,25 @@ class AmqpPublisher {
     }
 }
 
-jest.mock('uuid', () => ({ v4: uuid }))
+jest.mock('node:crypto', () => ({ randomUUID: uuid }))
 jest.mock('@src/providers/rabbitmq/amqpConnection', () => ({ AmqpConnection }))
 jest.mock('@src/providers/rabbitmq/amqpListener', () => ({ AmqpListener }))
 jest.mock('@src/providers/rabbitmq/amqpPublisher', () => ({ AmqpPublisher }))
 
-import { AsyncLocalStorage } from 'async_hooks'
-import { randomUUID } from 'crypto'
+import { AsyncLocalStorage } from 'node:async_hooks'
+import { randomUUID } from 'node:crypto'
+
+import { TimeoutError } from 'p-timeout'
 
 import { RabbitMQProvider } from '@src/providers/rabbitmq'
 
 import { validRabbitMQConfig } from '@tests/mocks/providers/rabbitmq'
 import { logger } from '@tests/unit/mocks'
 
-import { ConnectionStatus, ExchangeType, MessagePayload, QueueContext } from '@interfaces/index'
-import {
-    ExternalEvent,
-    ExternalTopic,
-    InternalEvent,
-    InternalQueueName,
-    InternalTopic,
-    QueueConfigType,
-    ServiceConfigByConfigType,
-} from '@interfaces/queueConfig'
+import { ConnectionStatus, ExchangeType, MessagePayload, PublishExternalEventOptions, QueueContext } from '@interfaces/index'
+import { QueueConfigType, ServiceConfigByConfigType } from '@interfaces/queueConfig'
+
+const messageHandler = async (): Promise<void> => {}
 
 describe('RabbitMQProvider', () => {
     const serviceName = 'Auth'
@@ -98,6 +94,8 @@ describe('RabbitMQProvider', () => {
     const internalTypeConfig = QueueConfigType.Internal
     let mockedExternalRabbitMQProvider: RabbitMQProvider
     let mockedInternalRabbitMQProvider: RabbitMQProvider
+    const eventName = 'event.name'
+    const topicName = 'TopicName'
 
     beforeEach(() => {
         serviceConfig = {
@@ -110,6 +108,8 @@ describe('RabbitMQProvider', () => {
             validRabbitMQConfig,
             serviceConfig,
             topicConfig,
+            [],
+            [],
             externalTypeConfig,
             logger,
             asyncLocalStorageMock,
@@ -121,6 +121,8 @@ describe('RabbitMQProvider', () => {
             validRabbitMQConfig,
             serviceConfig,
             topicConfig,
+            [],
+            [],
             internalTypeConfig,
             logger,
             asyncLocalStorageMock,
@@ -130,8 +132,6 @@ describe('RabbitMQProvider', () => {
 
     describe('method: `publishExternalDirect`', () => {
         it('should call publishToExchangeDirect', async () => {
-            const eventName = ExternalEvent.AidVaccinationStatus
-
             amqpPublisherMock.publishToExchangeDirect.mockResolvedValue(true)
 
             const result = await mockedExternalRabbitMQProvider.publishExternalDirect(eventName, {})
@@ -147,7 +147,7 @@ describe('RabbitMQProvider', () => {
                 },
                 message: {},
                 options: undefined,
-                routingKey: 'queue.diia.aid.vaccination.status.req',
+                routingKey: `queue.diia.${eventName}.req`,
             })
         })
     })
@@ -156,14 +156,12 @@ describe('RabbitMQProvider', () => {
         it('should return false for non existing topics', async () => {
             amqpPublisherMock.publishToExchange.mockResolvedValue(true)
 
-            const result = await mockedExternalRabbitMQProvider.publishExternal(ExternalEvent.AidVaccinationStatus, {})
+            const result = await mockedExternalRabbitMQProvider.publishExternal(eventName, {})
 
             expect(result).toBeFalsy()
         })
 
         it('should call publisher for publishing', async () => {
-            const eventName = ExternalEvent.AidVaccinationStatus
-
             amqpPublisherMock.publishToExchange.mockResolvedValue(true)
 
             const rabbitMQProvider = new RabbitMQProvider(
@@ -173,10 +171,12 @@ describe('RabbitMQProvider', () => {
                     publish: [eventName],
                 }),
                 {
-                    [ExternalTopic.AcquirerSharing]: {
+                    [topicName]: {
                         events: [eventName],
                     },
                 },
+                [],
+                [],
                 externalTypeConfig,
                 logger,
                 asyncLocalStorageMock,
@@ -188,7 +188,7 @@ describe('RabbitMQProvider', () => {
             expect(result).toBeTruthy()
             expect(amqpPublisherMock.publishToExchange).toHaveBeenCalledWith({
                 eventName,
-                exchangeName: 'TopicExternalAcquirerSharing',
+                exchangeName: `TopicExternal${topicName}`,
                 headers: {
                     serviceCode: undefined,
                     traceId: undefined,
@@ -200,10 +200,101 @@ describe('RabbitMQProvider', () => {
             })
         })
 
-        it('should call publisher for subscribing', async () => {
-            const eventName = ExternalEvent.AidVaccinationStatus
-            const topicName = ExternalTopic.AcquirerSharing
+        it('should throw error when timeout param passed and timeout exceed', async () => {
+            amqpPublisherMock.publishToExchange.mockResolvedValue(true)
 
+            const rabbitMQProvider = new RabbitMQProvider(
+                serviceName,
+                validRabbitMQConfig,
+                Object.assign(serviceConfig, {
+                    publish: [eventName],
+                }),
+                {
+                    [topicName]: {
+                        events: [eventName],
+                    },
+                },
+                [],
+                [],
+                externalTypeConfig,
+                logger,
+                asyncLocalStorageMock,
+                queueConfig,
+            )
+
+            const options: PublishExternalEventOptions = { publishTimeout: 1000 }
+
+            amqpPublisherMock.publishToExchange = jest.fn(async () => {
+                return await new Promise((resolve) => {
+                    setTimeout(() => {
+                        resolve(true)
+                    }, 10000)
+                })
+            })
+
+            await expect(rabbitMQProvider.publishExternal(eventName, {}, options)).rejects.toThrow(TimeoutError)
+            expect(amqpPublisherMock.publishToExchange).toHaveBeenCalledWith({
+                eventName,
+                exchangeName: `TopicExternal${topicName}`,
+                headers: {
+                    serviceCode: undefined,
+                    traceId: undefined,
+                },
+                message: {},
+                options,
+                responseRoutingKey: `diia.queue.diia.${eventName}.res`,
+                routingKey: `queue.diia.${eventName}.req`,
+            })
+        })
+
+        it('should return error when timeout with throw false params passed and timeout exceed', async () => {
+            amqpPublisherMock.publishToExchange.mockResolvedValue(true)
+
+            const rabbitMQProvider = new RabbitMQProvider(
+                serviceName,
+                validRabbitMQConfig,
+                Object.assign(serviceConfig, {
+                    publish: [eventName],
+                }),
+                {
+                    [topicName]: {
+                        events: [eventName],
+                    },
+                },
+                [],
+                [],
+                externalTypeConfig,
+                logger,
+                asyncLocalStorageMock,
+                queueConfig,
+            )
+
+            const options: PublishExternalEventOptions = { publishTimeout: 1000, throwOnPublishTimeout: false }
+
+            amqpPublisherMock.publishToExchange = jest.fn(async () => {
+                return await new Promise((resolve) => {
+                    setTimeout(() => {
+                        resolve(true)
+                    }, 10000)
+                })
+            })
+
+            expect(await rabbitMQProvider.publishExternal(eventName, {}, options)).toBe(false)
+            expect(amqpPublisherMock.publishToExchange).toHaveBeenCalledWith({
+                eventName,
+                exchangeName: `TopicExternal${topicName}`,
+                headers: {
+                    serviceCode: undefined,
+                    traceId: undefined,
+                },
+                message: {},
+                options,
+                responseRoutingKey: `diia.queue.diia.${eventName}.res`,
+                routingKey: `queue.diia.${eventName}.req`,
+            })
+        })
+
+        it('should call publisher for subscribing', async () => {
             amqpPublisherMock.publishToExchange.mockResolvedValue(true)
 
             const rabbitMQProvider = new RabbitMQProvider(
@@ -217,6 +308,8 @@ describe('RabbitMQProvider', () => {
                         events: [eventName],
                     },
                 },
+                [],
+                [],
                 externalTypeConfig,
                 logger,
                 asyncLocalStorageMock,
@@ -240,9 +333,6 @@ describe('RabbitMQProvider', () => {
         })
 
         it('should return false for serviceConfig without subscription', async () => {
-            const eventName = ExternalEvent.AidVaccinationStatus
-            const topicName = ExternalTopic.AcquirerSharing
-
             const rabbitMQProvider = new RabbitMQProvider(
                 serviceName,
                 validRabbitMQConfig,
@@ -252,6 +342,8 @@ describe('RabbitMQProvider', () => {
                         events: [eventName],
                     },
                 },
+                [],
+                [],
                 externalTypeConfig,
                 logger,
                 asyncLocalStorageMock,
@@ -266,8 +358,6 @@ describe('RabbitMQProvider', () => {
 
     describe('method: `subscribeExternal`', () => {
         it('should call listenQueue', async () => {
-            const topicName = ExternalTopic.AcquirerSharing
-            const eventName = ExternalEvent.AcquirerDocumentRequest
             const prefix = 'prefix'
             const expectedQueueName = `${prefix}.queue.diia.${eventName}.req`
 
@@ -286,13 +376,13 @@ describe('RabbitMQProvider', () => {
                         events: [eventName],
                     },
                 },
+                [],
+                [eventName],
                 internalTypeConfig,
                 logger,
                 asyncLocalStorageMock,
                 queueConfig,
             )
-
-            const messageHandler = async (): Promise<void> => {}
 
             const result = await rabbitMQProvider.subscribeExternal(messageHandler, {
                 listener: {
@@ -305,8 +395,6 @@ describe('RabbitMQProvider', () => {
         })
 
         it('should call listenQueue without Prefix', async () => {
-            const eventName = ExternalEvent.AcquirerDocumentRequest
-            const topicName = ExternalTopic.AcquirerSharing
             const expectedQueueName = `queue.diia.${eventName}.req`
 
             const rabbitMQProvider = new RabbitMQProvider(
@@ -324,13 +412,13 @@ describe('RabbitMQProvider', () => {
                         events: [eventName],
                     },
                 },
+                [],
+                [eventName],
                 internalTypeConfig,
                 logger,
                 asyncLocalStorageMock,
                 queueConfig,
             )
-
-            const messageHandler = async (): Promise<void> => {}
 
             const result = await rabbitMQProvider.subscribeExternal(messageHandler, {
                 listener: {
@@ -364,7 +452,7 @@ describe('RabbitMQProvider', () => {
 
     describe('method: `subscribe`', () => {
         it('should successfully subscribe message handler', async () => {
-            const subscriptionName = InternalQueueName.QueueAuth
+            const subscriptionName = 'queueAuth'
 
             const rabbitMQProvider = new RabbitMQProvider(
                 serviceName,
@@ -373,11 +461,13 @@ describe('RabbitMQProvider', () => {
                     subscribe: [subscriptionName],
                 }),
                 topicConfig,
+                [],
+                [subscriptionName],
                 internalTypeConfig,
                 logger,
                 asyncLocalStorageMock,
                 {
-                    [InternalQueueName.QueueAuth]: {
+                    [subscriptionName]: {
                         topics: [],
                     },
                 },
@@ -390,7 +480,7 @@ describe('RabbitMQProvider', () => {
         })
 
         it('should not subscribe message handler in case subscription name is not included in service subscriptions list', async () => {
-            const subscriptionName = InternalQueueName.QueueAuth
+            const subscriptionName = 'queueAuth'
 
             await mockedInternalRabbitMQProvider.init()
 
@@ -399,7 +489,7 @@ describe('RabbitMQProvider', () => {
         })
 
         it('should successfully subscribe message handler even in case subscription does not have topics', async () => {
-            const subscriptionName = InternalQueueName.QueueAuth
+            const subscriptionName = 'queueAuth'
 
             const rabbitMQProvider = new RabbitMQProvider(
                 serviceName,
@@ -408,12 +498,14 @@ describe('RabbitMQProvider', () => {
                     subscribe: [subscriptionName],
                 }),
                 topicConfig,
+                [],
+                [],
                 internalTypeConfig,
                 logger,
                 asyncLocalStorageMock,
                 {
                     [subscriptionName]: {
-                        topics: [InternalTopic.TopicAnalytics],
+                        topics: ['topicAnalytics'],
                     },
                 },
             )
@@ -428,9 +520,7 @@ describe('RabbitMQProvider', () => {
     describe('method: `publish`', () => {
         it('should successfully publish message for specified event', async () => {
             const traceId = randomUUID()
-            const eventName = InternalEvent.AcquirersOfferRequestHasDeleted
             const validMessageToPublish: MessagePayload = { key: 'value' }
-            const topicName = InternalTopic.TopicAcquirersOfferRequestLifeCycle
 
             const rabbitMQProvider = new RabbitMQProvider(
                 serviceName,
@@ -443,6 +533,8 @@ describe('RabbitMQProvider', () => {
                         events: [eventName],
                     },
                 },
+                [],
+                [eventName],
                 externalTypeConfig,
                 logger,
                 asyncLocalStorageMock,
@@ -452,7 +544,107 @@ describe('RabbitMQProvider', () => {
             uuid.mockReturnValue(traceId)
             amqpPublisherMock.publishToExchange.mockResolvedValue(true)
 
-            expect(await rabbitMQProvider.publish(eventName, validMessageToPublish, 'routingKey')).toBeTruthy()
+            expect(await rabbitMQProvider.publish(eventName, validMessageToPublish, { routingKey: 'routingKey' })).toBeTruthy()
+            expect(amqpPublisherMock.checkExchange).toHaveBeenCalledWith(topicName)
+            expect(amqpPublisherMock.publishToExchange).toHaveBeenCalledWith({
+                eventName,
+                message: validMessageToPublish,
+                exchangeName: topicName,
+                routingKey: 'routingKey',
+                headers: {
+                    serviceCode: undefined,
+                    traceId,
+                },
+            })
+        })
+
+        it('should not publish message and throw timeout error when timeout params passed and timeout exceed', async () => {
+            const traceId = randomUUID()
+            const validMessageToPublish: MessagePayload = { key: 'value' }
+
+            const rabbitMQProvider = new RabbitMQProvider(
+                serviceName,
+                validRabbitMQConfig,
+                Object.assign(serviceConfig, {
+                    publish: [topicName],
+                }),
+                {
+                    [topicName]: {
+                        events: [eventName],
+                    },
+                },
+                [],
+                [eventName],
+                externalTypeConfig,
+                logger,
+                asyncLocalStorageMock,
+                queueConfig,
+            )
+
+            uuid.mockReturnValue(traceId)
+            amqpPublisherMock.publishToExchange = jest.fn(async () => {
+                return await new Promise((resolve) => {
+                    setTimeout(() => {
+                        resolve(true)
+                    }, 10000)
+                })
+            })
+
+            await expect(
+                rabbitMQProvider.publish(eventName, validMessageToPublish, { publishTimeout: 1000, routingKey: 'routingKey' }),
+            ).rejects.toThrow(TimeoutError)
+            expect(amqpPublisherMock.checkExchange).toHaveBeenCalledWith(topicName)
+            expect(amqpPublisherMock.publishToExchange).toHaveBeenCalledWith({
+                eventName,
+                message: validMessageToPublish,
+                exchangeName: topicName,
+                routingKey: 'routingKey',
+                headers: {
+                    serviceCode: undefined,
+                    traceId,
+                },
+            })
+        })
+
+        it('should not publish message and return false when timeout with throw false params passed and timeout exceed', async () => {
+            const traceId = randomUUID()
+            const validMessageToPublish: MessagePayload = { key: 'value' }
+
+            const rabbitMQProvider = new RabbitMQProvider(
+                serviceName,
+                validRabbitMQConfig,
+                Object.assign(serviceConfig, {
+                    publish: [topicName],
+                }),
+                {
+                    [topicName]: {
+                        events: [eventName],
+                    },
+                },
+                [],
+                [eventName],
+                externalTypeConfig,
+                logger,
+                asyncLocalStorageMock,
+                queueConfig,
+            )
+
+            uuid.mockReturnValue(traceId)
+            amqpPublisherMock.publishToExchange = jest.fn(async () => {
+                return await new Promise((resolve) => {
+                    setTimeout(() => {
+                        resolve(true)
+                    }, 10000)
+                })
+            })
+
+            expect(
+                await rabbitMQProvider.publish(eventName, validMessageToPublish, {
+                    publishTimeout: 1000,
+                    throwOnPublishTimeout: false,
+                    routingKey: 'routingKey',
+                }),
+            ).toBe(false)
             expect(amqpPublisherMock.checkExchange).toHaveBeenCalledWith(topicName)
             expect(amqpPublisherMock.publishToExchange).toHaveBeenCalledWith({
                 eventName,
@@ -467,43 +659,61 @@ describe('RabbitMQProvider', () => {
         })
 
         it('should not publish message for specified event in case event is not implemented', async () => {
-            const eventName = <InternalEvent>(<unknown>'unknown')
+            const unknownEventName = 'unknown.event.name'
             const validMessageToPublish: MessagePayload = { key: 'value' }
 
-            expect(await mockedInternalRabbitMQProvider.publish(eventName, validMessageToPublish, 'routingKey')).toBeFalsy()
-            expect(logger.error).toHaveBeenCalledWith(`Event [${eventName}] is not implemented`)
+            expect(
+                await mockedInternalRabbitMQProvider.publish(unknownEventName, validMessageToPublish, { routingKey: 'routingKey' }),
+            ).toBeFalsy()
+            expect(logger.error).toHaveBeenCalledWith(`Event [${unknownEventName}] is not implemented`)
         })
 
         it('should not publish message for specified event in case there is no exchange for provided event', async () => {
-            const eventName = InternalEvent.AuthUserLogOut
+            const eventNameWithoutExchange = 'event.name.without.exchange'
             const validMessageToPublish: MessagePayload = { key: 'value' }
+            const rabbitMQProvider = new RabbitMQProvider(
+                serviceName,
+                validRabbitMQConfig,
+                Object.assign(serviceConfig, {
+                    publish: [topicName],
+                }),
+                {
+                    [topicName]: {
+                        events: [eventName],
+                    },
+                },
+                [],
+                [eventNameWithoutExchange],
+                internalTypeConfig,
+                logger,
+                asyncLocalStorageMock,
+                queueConfig,
+            )
 
-            expect(await mockedInternalRabbitMQProvider.publish(eventName, validMessageToPublish, 'routingKey')).toBeFalsy()
-            expect(logger.error).toHaveBeenCalledWith(`Can't find topic name by event [${eventName}]`)
+            expect(
+                await rabbitMQProvider.publish(eventNameWithoutExchange, validMessageToPublish, { routingKey: 'routingKey' }),
+            ).toBeFalsy()
+            expect(logger.error).toHaveBeenCalledWith(`Can't find topic name by event [${eventNameWithoutExchange}]`)
         })
 
         it('should not publish message for specified event in case event is not allowed for actual exchange', async () => {
-            const eventName = InternalEvent.AuthUserLogOut
             const validMessageToPublish: MessagePayload = { key: 'value' }
 
-            expect(await mockedInternalRabbitMQProvider.publish(eventName, validMessageToPublish, 'routingKey')).toBeFalsy()
+            expect(await mockedInternalRabbitMQProvider.publish(eventName, validMessageToPublish, { routingKey: 'routingKey' })).toBeFalsy()
         })
 
         it('should not publish message for specified event in case unable to check exchange', async () => {
-            const eventName = InternalEvent.AuthUserLogOut
             const validMessageToPublish: MessagePayload = { key: 'value' }
 
-            amqpPublisherMock.checkExchange.mockRejectedValue(new Error())
+            amqpPublisherMock.checkExchange.mockRejectedValue(new Error('Error'))
 
-            expect(await mockedInternalRabbitMQProvider.publish(eventName, validMessageToPublish, 'routingKey')).toBeFalsy()
+            expect(await mockedInternalRabbitMQProvider.publish(eventName, validMessageToPublish, { routingKey: 'routingKey' })).toBeFalsy()
         })
     })
 
     describe('method: `subscribeTask`', () => {
         it('should successfully subscribe task with delay', async () => {
-            const queueName = InternalQueueName.QueueAuth
-
-            const messageHandler = async (): Promise<void> => {}
+            const queueName = 'queueAuth'
 
             expect(await mockedInternalRabbitMQProvider.subscribeTask(queueName, messageHandler, { delayed: true })).toBeTruthy()
             expect(amqpListenerMock.listenQueue).toHaveBeenCalledWith(queueName, messageHandler)
@@ -514,9 +724,7 @@ describe('RabbitMQProvider', () => {
         })
 
         it('should successfully subscribe task without delay', async () => {
-            const queueName = InternalQueueName.QueueAuth
-
-            const messageHandler = async (): Promise<void> => {}
+            const queueName = 'queueAuth'
 
             expect(await mockedInternalRabbitMQProvider.subscribeTask(queueName, messageHandler, {})).toBeTruthy()
             expect(amqpListenerMock.listenQueue).toHaveBeenCalledWith(queueName, messageHandler)
@@ -528,7 +736,7 @@ describe('RabbitMQProvider', () => {
     describe('method: `publishTask`', () => {
         it('should successfully publish task', async () => {
             const traceId = randomUUID()
-            const queueName = InternalQueueName.QueueAuth
+            const queueName = 'queueAuth'
             const message = { key: 'value' }
 
             uuid.mockReturnValue(traceId)

@@ -1,7 +1,3 @@
-const convertParamsByRules = jest.fn()
-
-jest.mock('@diia-inhouse/utils', () => ({ convertParamsByRules }))
-
 import { mockClass } from '@diia-inhouse/test'
 import { ValidationSchema } from '@diia-inhouse/validators'
 
@@ -13,6 +9,8 @@ import { RabbitMQProvider } from '@src/providers/rabbitmq'
 import { validRabbitMQConfig } from '@tests/mocks/providers/rabbitmq'
 
 import { QueueConfigType } from '@interfaces/queueConfig'
+
+const messageHandler = async (): Promise<void> => {}
 
 describe('Task', () => {
     const taskListener = {
@@ -26,6 +24,8 @@ describe('Task', () => {
         validRabbitMQConfig,
         {},
         {},
+        [],
+        [],
         QueueConfigType.Internal,
         logger,
         asyncLocalStorage,
@@ -35,8 +35,6 @@ describe('Task', () => {
         it('should successfully subscribe to task', async () => {
             const taskName = 'taskName'
             const task = new Task(queueProvider, [taskListener], eventMessageHandler, logger)
-
-            const messageHandler = async (): Promise<void> => {}
 
             jest.spyOn(queueProvider, 'getServiceName').mockReturnValue('Auth')
             jest.spyOn(queueProvider, 'subscribeTask').mockResolvedValue(true)

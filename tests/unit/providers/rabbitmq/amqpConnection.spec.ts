@@ -1,8 +1,9 @@
+/* eslint-disable unicorn/prefer-event-target */
 const connectMock = jest.fn()
 
 jest.mock('amqplib', () => ({ connect: connectMock }))
 
-import { EventEmitter } from 'events'
+import { EventEmitter } from 'node:events'
 
 import { connectOptions, reconnectOptions, socketOptions } from '../../../mocks/providers/rabbitmq/amqpConnection'
 
@@ -82,9 +83,9 @@ describe('AmqpConnection', () => {
 
             await amqpConnection.connect()
 
-            expect(await amqpConnection.createChannel()).toBeInstanceOf(EventEmitter)
-            expect(logger.info).toHaveBeenCalledWith('Creating channel to RabbitMQ...')
-            expect(logger.info).toHaveBeenCalledWith('Channel to RabbitMQ is created')
+            expect(await amqpConnection.createChannel('test')).toBeInstanceOf(EventEmitter)
+            expect(logger.info).toHaveBeenCalledWith('Creating channel to RabbitMQ...', { queueName: 'test' })
+            expect(logger.info).toHaveBeenCalledWith('Channel to RabbitMQ is created', { queueName: 'test' })
         })
 
         describe('event handlers', () => {
@@ -95,14 +96,14 @@ describe('AmqpConnection', () => {
 
                 await amqpConnection.connect()
 
-                const channel = await amqpConnection.createChannel()
+                const channel = await amqpConnection.createChannel('test')
 
                 channel.emit('close')
 
                 expect(channel).toBeInstanceOf(EventEmitter)
                 expect(logger.info).toHaveBeenCalledWith('Channel was closed.')
-                expect(logger.info).toHaveBeenCalledWith('Creating channel to RabbitMQ...')
-                expect(logger.info).toHaveBeenCalledWith('Channel to RabbitMQ is created')
+                expect(logger.info).toHaveBeenCalledWith('Creating channel to RabbitMQ...', { queueName: 'test' })
+                expect(logger.info).toHaveBeenCalledWith('Channel to RabbitMQ is created', { queueName: 'test' })
             })
 
             it('should properly handle error event', async () => {
@@ -113,14 +114,14 @@ describe('AmqpConnection', () => {
 
                 await amqpConnection.connect()
 
-                const channel = await amqpConnection.createChannel()
+                const channel = await amqpConnection.createChannel('test')
 
                 channel.emit('error', expectedError)
 
                 expect(channel).toBeInstanceOf(EventEmitter)
                 expect(logger.error).toHaveBeenCalledWith('Channel on error', { err: expectedError })
-                expect(logger.info).toHaveBeenCalledWith('Creating channel to RabbitMQ...')
-                expect(logger.info).toHaveBeenCalledWith('Channel to RabbitMQ is created')
+                expect(logger.info).toHaveBeenCalledWith('Creating channel to RabbitMQ...', { queueName: 'test' })
+                expect(logger.info).toHaveBeenCalledWith('Channel to RabbitMQ is created', { queueName: 'test' })
             })
         })
     })

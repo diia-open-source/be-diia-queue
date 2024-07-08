@@ -1,4 +1,4 @@
-import { randomUUID } from 'crypto'
+import { randomUUID } from 'node:crypto'
 
 import { ValidationError } from '@diia-inhouse/errors'
 
@@ -13,13 +13,11 @@ import {
     pubSubService,
 } from '../mocks'
 
-import { InternalEvent } from '@src/index'
-
 describe('EventMessageHandler', () => {
     describe('method: `eventListenersMessageHandler`', () => {
         it('should return undefined for empty response', async () => {
             const eventListeners = {
-                [InternalEvent.AcquirersOfferRequestHasDeleted]: eventListener,
+                acquirersOfferRequestHasDeleted: eventListener,
             }
 
             expect(await eventMessageHandler.eventListenersMessageHandler(eventListeners, null)).toBeUndefined()
@@ -31,12 +29,12 @@ describe('EventMessageHandler', () => {
             })
 
             const eventListeners = {
-                [InternalEvent.AcquirersOfferRequestHasDeleted]: eventListener,
+                acquirersOfferRequestHasDeleted: eventListener,
             }
 
             expect(await eventMessageHandler.eventListenersMessageHandler(eventListeners, validMessage)).toBeUndefined()
 
-            expect(logger.info).toHaveBeenCalledWith(`No listener for the event [${InternalEvent.AuthUserLogOut}]`)
+            expect(logger.info).toHaveBeenCalledWith(`No listener for the event [authUserLogOut]`)
             expect(validMessage.done).toHaveBeenCalledWith()
         })
     })
@@ -49,7 +47,7 @@ describe('EventMessageHandler', () => {
 
             await eventMessageHandler.eventListenerMessageHandler(undefined, validMessage)
 
-            expect(logger.info).toHaveBeenCalledWith(`No listener for the event [${InternalEvent.AuthUserLogOut}]`)
+            expect(logger.info).toHaveBeenCalledWith(`No listener for the event [authUserLogOut]`)
             expect(validMessage.done).toHaveBeenCalledWith()
         })
 
@@ -80,7 +78,7 @@ describe('EventMessageHandler', () => {
 
             it('should skip to run event listener message handler in case message is invalid', async () => {
                 const thrownError = new Error('Invalid input message format')
-                const { data } = validMessage
+                const { data, done } = validMessage
                 const {
                     event,
                     payload: { uuid },
@@ -105,7 +103,7 @@ describe('EventMessageHandler', () => {
                 expect(logger.error).toHaveBeenCalledWith(`Message in a wrong format was received from a synced event: ${event}`, {
                     err: thrownError,
                 })
-                expect(validMessage.done).toHaveBeenCalledWith()
+                expect(done).toHaveBeenCalledWith()
             })
 
             it('should skip to run event listener message handler in case message payload contains error', async () => {
@@ -146,7 +144,7 @@ describe('EventMessageHandler', () => {
 
             it('should just log error in case event message handler rejects', async () => {
                 const rejectedError = new Error('Internal error')
-                const { data } = validMessage
+                const { data, done } = validMessage
                 const {
                     event,
                     payload: { uuid },
@@ -173,11 +171,11 @@ describe('EventMessageHandler', () => {
                 expect(logger.error).toHaveBeenCalledWith(`Failed to handle the synced event [${event}] with payload`, {
                     err: rejectedError,
                 })
-                expect(validMessage.done).toHaveBeenCalledWith()
+                expect(done).toHaveBeenCalledWith()
             })
 
             it('should successfully handle event message', async () => {
-                const { data } = validMessage
+                const { data, done } = validMessage
                 const {
                     event,
                     payload: { uuid },
@@ -201,11 +199,11 @@ describe('EventMessageHandler', () => {
                 expect(externalChannel.isChannelActive).toHaveBeenCalledWith(channel)
                 expect(eventMessageValidator.validateSyncedEventMessage).toHaveBeenCalledWith(data, validationRules)
                 expect(eventListener.handler).toHaveBeenCalledWith(payload, meta)
-                expect(validMessage.done).toHaveBeenCalledWith()
+                expect(done).toHaveBeenCalledWith()
             })
 
             it('should successfully publish message in case channel is active', async () => {
-                const { data } = validMessage
+                const { data, done } = validMessage
                 const {
                     event,
                     payload: { uuid },
@@ -224,7 +222,7 @@ describe('EventMessageHandler', () => {
                 expect(externalChannel.getChannel).toHaveBeenCalledWith(event, uuid)
                 expect(externalChannel.isChannelActive).toHaveBeenCalledWith(channel)
                 expect(pubSubService.publish).toHaveBeenCalledWith(channel, data)
-                expect(validMessage.done).toHaveBeenCalledWith()
+                expect(done).toHaveBeenCalledWith()
             })
         })
 

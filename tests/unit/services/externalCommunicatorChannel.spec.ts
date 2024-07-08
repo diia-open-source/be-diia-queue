@@ -1,6 +1,6 @@
-import { randomUUID } from 'crypto'
+import { randomUUID } from 'node:crypto'
 
-import { ExternalCommunicatorChannel, ExternalEvent } from '../../../src/index'
+import { ExternalCommunicatorChannel } from '../../../src/index'
 import { cacheService } from '../mocks'
 
 describe(`${ExternalCommunicatorChannel.name}`, () => {
@@ -8,7 +8,7 @@ describe(`${ExternalCommunicatorChannel.name}`, () => {
 
     describe('method: `getChannel`', () => {
         it('should successfully get channel', () => {
-            const eventName = ExternalEvent.AcquirerDocumentRequest
+            const eventName = 'acquirerDocumentRequest'
             const requestUuid = randomUUID()
 
             expect(communicatorChannel.getChannel(eventName, requestUuid)).toBe(`external_communicator_channel_${eventName}_${requestUuid}`)

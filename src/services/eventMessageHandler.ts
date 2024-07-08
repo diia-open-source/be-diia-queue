@@ -1,17 +1,17 @@
-import { AsyncLocalStorage } from 'async_hooks'
+import { AsyncLocalStorage } from 'node:async_hooks'
+import { randomUUID } from 'node:crypto'
 
 import { isValidTraceId, trace } from '@opentelemetry/api'
-import { v4 as uuid } from 'uuid'
 
 import { ValidationError } from '@diia-inhouse/errors'
 import { PubSubService } from '@diia-inhouse/redis'
-import { AlsData, Logger, PublicServiceCode } from '@diia-inhouse/types'
-import { convertParamsByRules, utils } from '@diia-inhouse/utils'
+import { AlsData, Logger } from '@diia-inhouse/types'
+import { utils } from '@diia-inhouse/utils'
 import { ValidationSchema } from '@diia-inhouse/validators'
 
 import { EventBusListener, QueueContext, QueueMessage, QueueMessageData, TaskListener } from '../interfaces'
 import { EventListeners } from '../interfaces/externalCommunicator'
-import { EventName, ExternalEvent } from '../interfaces/queueConfig'
+import { EventName } from '../interfaces/queueConfig'
 import { totalMessageHandlerErrorsMetrics } from '../metrics'
 
 import { EventMessageValidator } from './eventMessageValidator'
@@ -42,7 +42,7 @@ export class EventMessageHandler {
         const { done, data, properties } = message
         const { event, payload, meta } = data
         const activeSpanTraceId = trace.getActiveSpan()?.spanContext().traceId
-        const traceId = isValidTraceId(activeSpanTraceId) ? activeSpanTraceId : properties.headers?.traceId || uuid()
+        const traceId = isValidTraceId(activeSpanTraceId) ? activeSpanTraceId : properties.headers?.traceId || randomUUID()
         const context: AlsData = {
             logData: {
                 traceId,
@@ -51,7 +51,7 @@ export class EventMessageHandler {
         }
 
         await this.asyncLocalStorage.run(context, async () => {
-            this.logger.io(`Handling event [${event}] with payload`, { payload })
+            this.logger.info(`Handling event [${event}] with payload`, { payload })
             if (!listener) {
                 this.logger.info(`No listener for the event [${event}]`)
 
@@ -64,16 +64,12 @@ export class EventMessageHandler {
 
             try {
                 this.eventMessageValidator.validateEventMessage(data, payloadValidationSchema)
-                const convertedPayload = convertParamsByRules(payload, payloadValidationSchema)
-                const resp = await listener.handler?.(
-                    convertedPayload,
-                    convertParamsByRules(meta, this.eventMessageValidator.metaValidationSchema),
-                )
+                const resp = await listener.handler?.(payload, meta)
 
                 return this.performDone(message, resp, false)
             } catch (err) {
                 if (err instanceof ValidationError && 'validationErrorHandler' in listener && payload?.uuid) {
-                    await listener.validationErrorHandler?.(err, payload.uuid).catch((error) => error)
+                    await listener.validationErrorHandler?.(err, payload.uuid).catch((err_) => err_)
                 }
 
                 this.logger.error(`Failed to handle event ${event}`, { err })
@@ -99,7 +95,7 @@ export class EventMessageHandler {
             return done()
         }
 
-        const channel = this.externalChannel.getChannel(<ExternalEvent>event, payload.uuid)
+        const channel = this.externalChannel.getChannel(<EventName>event, payload.uuid)
         const isChannelActive = await this.externalChannel.isChannelActive(channel)
 
         if (!isChannelActive && listener.handler) {
@@ -174,7 +170,7 @@ export class EventMessageHandler {
         })
     }
 
-    private getServiceCode(listener: EventBusListener | TaskListener | undefined, payload: unknown): PublicServiceCode | undefined {
+    private getServiceCode(listener: EventBusListener | TaskListener | undefined, payload: unknown): string | undefined {
         try {
             return listener?.getServiceCode?.(payload)
         } catch (err) {

@@ -1,7 +1,10 @@
 import { Logger, OnInit } from '@diia-inhouse/types'
 
-import { EventBusListener, EventBusQueue, MessageHandler, MessagePayload, SubscribeOptions } from '../interfaces'
-import { InternalEvent, InternalQueueName } from '../interfaces/queueConfig'
+import { EventBusListener, EventBusQueue } from '../interfaces/eventBus'
+import { MessageHandler } from '../interfaces/messageHandler'
+import { PublishInternalEventOptions, SubscribeOptions } from '../interfaces/options'
+import { MessagePayload } from '../interfaces/providers/rabbitmq/amqpPublisher'
+import { QueueName } from '../interfaces/queueConfig'
 import { RabbitMQProvider } from '../providers/rabbitmq'
 import * as Utils from '../utils'
 
@@ -14,7 +17,7 @@ export class EventBus implements EventBusQueue, OnInit {
         private readonly eventMessageHandler: EventMessageHandler,
 
         private readonly logger: Logger,
-        private readonly queueName: InternalQueueName | undefined = undefined,
+        private readonly queueName: QueueName | undefined,
     ) {}
 
     async onInit(): Promise<void> {
@@ -34,16 +37,16 @@ export class EventBus implements EventBusQueue, OnInit {
             },
         )
 
-        this.eventListenerList.forEach((listener) => {
+        for (const listener of this.eventListenerList) {
             this.logger.info(`Event listener [${listener.event}] initialized successfully`)
-        })
+        }
     }
 
-    async subscribe(subscriptionName: InternalQueueName, messageHandler: MessageHandler, options?: SubscribeOptions): Promise<boolean> {
+    async subscribe(subscriptionName: QueueName, messageHandler: MessageHandler, options?: SubscribeOptions): Promise<boolean> {
         return await this.queueProvider.subscribe(subscriptionName, messageHandler, options)
     }
 
-    async publish(eventName: InternalEvent, message: MessagePayload, routingKey?: string): Promise<boolean> {
-        return await this.queueProvider.publish(eventName, message, routingKey)
+    async publish(eventName: QueueName, message: MessagePayload, options?: PublishInternalEventOptions): Promise<boolean> {
+        return await this.queueProvider.publish(eventName, message, options)
     }
 }

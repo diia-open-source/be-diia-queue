@@ -1,7 +1,7 @@
 import { Logger, OnInit } from '@diia-inhouse/types'
 
 import { EventBusListener, MessageHandler, ScheduledTasksQueue, SubscribeOptions } from '../interfaces'
-import { ScheduledTaskEvent, ScheduledTaskQueueName } from '../interfaces/queueConfig'
+import { EventName, QueueName } from '../interfaces/queueConfig'
 import { RabbitMQProvider } from '../providers/rabbitmq'
 import * as Utils from '../utils'
 
@@ -16,7 +16,7 @@ export class ScheduledTask implements ScheduledTasksQueue, OnInit {
         private readonly eventMessageHandler: EventMessageHandler,
 
         private readonly logger: Logger,
-        private readonly queueName: ScheduledTaskQueueName | undefined = undefined,
+        private readonly queueName: QueueName | undefined,
     ) {}
 
     async onInit(): Promise<void> {
@@ -36,18 +36,18 @@ export class ScheduledTask implements ScheduledTasksQueue, OnInit {
             },
         )
 
-        this.scheduledTaskList.forEach((listener) => {
+        for (const listener of this.scheduledTaskList) {
             this.logger.info(`Scheduled task [${listener.event}] initialized successfully`)
-        })
+        }
     }
 
-    subscribe(subscriptionName: ScheduledTaskQueueName, messageHandler: MessageHandler, options?: SubscribeOptions): Promise<boolean> {
+    subscribe(subscriptionName: QueueName, messageHandler: MessageHandler, options?: SubscribeOptions): Promise<boolean> {
         const routingKey = `${this.queueProvider.getServiceName()}.${this.routingPart}`
 
         return this.queueProvider.subscribe(subscriptionName, messageHandler, { ...options, routingKey })
     }
 
-    publish(scheduledTaskName: ScheduledTaskEvent, serviceName: string): Promise<boolean> {
-        return this.queueProvider.publish(scheduledTaskName, {}, `${serviceName}.${this.routingPart}`)
+    publish(scheduledTaskName: EventName, serviceName: string): Promise<boolean> {
+        return this.queueProvider.publish(scheduledTaskName, {}, { routingKey: `${serviceName}.${this.routingPart}` })
     }
 }

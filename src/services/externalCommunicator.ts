@@ -1,12 +1,12 @@
-import { v4 as uuid } from 'uuid'
+import { randomUUID } from 'node:crypto'
 
 import { ExternalCommunicatorError } from '@diia-inhouse/errors'
 import { PubSubService } from '@diia-inhouse/redis'
 import { Logger, OnRegistrationsFinished } from '@diia-inhouse/types'
 
-import { EventBusListener, ExternalEventBusQueue, MessagePayload, PublishOptions, QueueMessageData } from '../interfaces'
+import { EventBusListener, ExternalEventBusQueue, MessagePayload, PublishDirectOptions, QueueMessageData } from '../interfaces'
 import { EventListeners, ExternalCommunicatorResponse, ReceiveDirectOps, ReceiveOps } from '../interfaces/externalCommunicator'
-import { ExternalEvent } from '../interfaces/queueConfig'
+import { EventName } from '../interfaces/queueConfig'
 import * as Utils from '../utils'
 
 import { EventMessageValidator } from './eventMessageValidator'
@@ -31,10 +31,10 @@ export class ExternalCommunicator implements OnRegistrationsFinished {
     }
 
     async receiveDirect<T>(event: string, request: unknown = {}, ops: ReceiveDirectOps = {}): Promise<T> {
-        const requestUuid: string = uuid()
+        const requestUuid = randomUUID()
         const payload: MessagePayload = { uuid: requestUuid, request }
         const { topic, validationRules, ignoreCache, retry, timeout } = ops
-        const options: PublishOptions = { ignoreCache, retry, timeout }
+        const options: PublishDirectOptions = { ignoreCache, retry, timeout }
         const externalResponse = await this.externalEventBus.publishDirect<QueueMessageData<ExternalCommunicatorResponse<T>>>(
             event,
             payload,
@@ -57,17 +57,17 @@ export class ExternalCommunicator implements OnRegistrationsFinished {
         if (error) {
             this.logger.fatal(`Error received by an external event ${event}: ${error.http_code} ${error.message}`, request)
 
-            throw new ExternalCommunicatorError(error.message, error.http_code, { event, ...error.data })
+            throw new ExternalCommunicatorError(error.message, error.http_code, { event, httpCode: error.http_code, ...error.data })
         }
 
         return response
     }
 
     /**
-     * @deprecated use receiveDirect in case receiver supports direct communcation
+     * @deprecated use receiveDirect in case provider supports direct communcation
      */
-    async receive<T>(event: ExternalEvent, request: unknown = {}, ops: ReceiveOps = {}): Promise<T | undefined> {
-        const timeout: number = ops.timeout || this.timeout
+    async receive<T>(event: EventName, request: unknown = {}, ops: ReceiveOps = {}): Promise<T | undefined> {
+        const timeout = ops.timeout || this.timeout
         const eventListener = this.eventListeners[event]
         if (!eventListener) {
             throw new Error(`Listener not found by the provided event: ${event}`)
@@ -77,13 +77,13 @@ export class ExternalCommunicator implements OnRegistrationsFinished {
             throw new Error(`Listener is not synchronous for the provided event: ${event}`)
         }
 
-        const requestUuid: string = ops.requestUuid || uuid()
+        const requestUuid = ops.requestUuid || randomUUID()
         const payload: MessagePayload = { uuid: requestUuid, request }
-        const { ignoreCache, retry } = ops
+        const { ignoreCache, retry, async } = ops
         const options = { ignoreCache, retry }
 
-        if (ops.async) {
-            const success: boolean = await this.externalEventBus.publish(event, payload, options)
+        if (async) {
+            const success = await this.externalEventBus.publish(event, payload, options)
             if (!success) {
                 throw new Error(`Failed to publish async external event ${event}`)
             }
@@ -91,9 +91,9 @@ export class ExternalCommunicator implements OnRegistrationsFinished {
             return
         }
 
-        const channel: string = this.externalChannel.getChannel(event, requestUuid)
-        const promise: Promise<T> = new Promise((resolve: (value: T) => void, reject: (reason: unknown) => void) => {
-            const timer: NodeJS.Timeout = setTimeout(async () => {
+        const channel = this.externalChannel.getChannel(event, requestUuid)
+        const promise = new Promise((resolve: (value: T) => void, reject: (reason: unknown) => void) => {
+            const timer = setTimeout(async () => {
                 await this.pubsub.unsubscribe(channel)
 
                 return reject(new Error(`External communication timeout error for the channel ${channel}`))
@@ -127,7 +127,7 @@ export class ExternalCommunicator implements OnRegistrationsFinished {
 
         await this.externalChannel.saveActiveChannel(channel, timeout)
 
-        const success: boolean = await this.externalEventBus.publish(event, payload)
+        const success = await this.externalEventBus.publish(event, payload)
         if (!success) {
             await this.pubsub.unsubscribe(channel)
 

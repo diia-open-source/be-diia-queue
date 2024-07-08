@@ -1,4 +1,4 @@
-import { AsyncLocalStorage } from 'async_hooks'
+import { AsyncLocalStorage } from 'node:async_hooks'
 
 import Logger from '@diia-inhouse/diia-logger'
 import { EnvService } from '@diia-inhouse/env'
@@ -6,7 +6,7 @@ import { CacheService, PubSubService } from '@diia-inhouse/redis'
 import { mockClass } from '@diia-inhouse/test'
 import { AppValidator } from '@diia-inhouse/validators'
 
-import { EventMessageHandler, InternalEvent, QueueContext } from '@src/index'
+import { EventMessageHandler, QueueContext } from '@src/index'
 
 import { EventMessageValidator } from '@services/eventMessageValidator'
 import { ExternalCommunicatorChannel } from '@services/externalCommunicatorChannel'
@@ -15,7 +15,7 @@ export const logger = new (mockClass(Logger))()
 
 export const eventListener = {
     handler: jest.fn(),
-    event: InternalEvent.AcquirersOfferRequestHasDeleted,
+    event: 'acquirersOfferRequestHasDeleted',
     validationRules: undefined,
     isSync: false,
     validationErrorHandler: jest.fn(),

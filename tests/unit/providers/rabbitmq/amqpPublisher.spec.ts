@@ -1,8 +1,9 @@
+/* eslint-disable unicorn/prefer-event-target */
 const uuid = jest.fn()
 
-jest.mock('uuid', () => ({ v4: uuid }))
+jest.mock('node:crypto', () => ({ randomUUID: uuid }))
 
-import { EventEmitter } from 'events'
+import { EventEmitter } from 'node:events'
 
 import { Replies } from 'amqplib'
 
@@ -13,7 +14,7 @@ import { AmqpPublisher } from '@src/providers/rabbitmq/amqpPublisher'
 
 import { logger } from '@tests/unit/mocks'
 
-import { ConnectionStatus, QueueMessageData } from '@interfaces/index'
+import { ConnectionStatus } from '@interfaces/index'
 
 const channelMock = {
     assertExchange: jest.fn(),
@@ -114,18 +115,8 @@ describe('AmqpPublisher', () => {
 
     describe('method: `publishToExchange`', () => {
         it('should successfully publish message to exchange', async () => {
-            const { message } = validPublishToExchangeParams
             const amqpConnection = <AmqpConnection>(<unknown>new Connection())
             const amqpPublisher = new AmqpPublisher(amqpConnection, logger)
-            const eventMessage: QueueMessageData = {
-                event: 'eventName',
-                meta: {
-                    date: new Date(),
-                    ignoreCache: true,
-                    responseRoutingKey: 'responseRoutingKey',
-                },
-                payload: message,
-            }
 
             connectionMock.createChannel.mockResolvedValue(new Channel())
             channelMock.publish.mockResolvedValue(true)
@@ -133,10 +124,7 @@ describe('AmqpPublisher', () => {
             await amqpPublisher.init()
 
             expect(await amqpPublisher.publishToExchange(validPublishToExchangeParams)).toBeTruthy()
-            expect(logger.io).toHaveBeenCalledWith(`Publish event: ${eventMessage.event}`, {
-                routingKey: 'routingKey',
-                eventMessage: expect.anything(),
-            })
+            expect(logger.io).toHaveBeenCalledWith('Event message', expect.anything())
             expect(channelMock.publish).toHaveBeenCalled()
         })
 

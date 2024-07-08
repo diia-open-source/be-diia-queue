@@ -1,7 +1,7 @@
 import * as amqp from 'amqplib'
 
-import { ListenerOptions } from '../..'
 import { AmqpConnection } from '../../../providers/rabbitmq/amqpConnection'
+import { ListenerOptions } from '../../options'
 import { EventName } from '../../queueConfig'
 
 import { ConnectOptions, ConnectionStatus, ReconnectOptions, SocketOptions } from './amqpConnection'

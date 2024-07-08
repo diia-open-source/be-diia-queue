@@ -1,9 +1,17 @@
 import { EnvService } from '@diia-inhouse/env'
 import { Logger, OnInit } from '@diia-inhouse/types'
 
-import { EventBusListener, ExternalEventBusQueue, MessageHandler, MessagePayload, PublishOptions, SubscribeOptions } from '../interfaces'
+import {
+    EventBusListener,
+    ExternalEventBusQueue,
+    MessageHandler,
+    MessagePayload,
+    PublishDirectOptions,
+    PublishExternalEventOptions,
+    SubscribeOptions,
+} from '../interfaces'
 import { EventListeners } from '../interfaces/externalCommunicator'
-import { EventName, ExternalEvent, ExternalTopic } from '../interfaces/queueConfig'
+import { EventName, Topic } from '../interfaces/queueConfig'
 import { RabbitMQProvider } from '../providers/rabbitmq'
 import * as Utils from '../utils'
 
@@ -32,9 +40,9 @@ export class ExternalEventBus implements ExternalEventBusQueue, OnInit {
                 listener: externalConfig.listenerOptions,
             })
 
-            this.externalEventListenerList.forEach((listener) => {
+            for (const listener of this.externalEventListenerList) {
                 this.logger.info(`External event listener [${listener.event}] initialized successfully`)
-            })
+            }
         } catch (err) {
             this.logger.error('Failed to initialize external event bus', { err })
             throw err
@@ -45,11 +53,11 @@ export class ExternalEventBus implements ExternalEventBusQueue, OnInit {
         return await this.queueProvider.subscribeExternal(messageHandler, options)
     }
 
-    async publish(eventName: ExternalEvent, message: MessagePayload, options?: PublishOptions): Promise<boolean> {
+    async publish(eventName: EventName, message: MessagePayload, options?: PublishExternalEventOptions): Promise<boolean> {
         return await this.queueProvider.publishExternal(eventName, message, options)
     }
 
-    async publishDirect<T>(eventName: EventName, message: MessagePayload, topic?: ExternalTopic, options?: PublishOptions): Promise<T> {
+    async publishDirect<T>(eventName: EventName, message: MessagePayload, topic?: Topic, options?: PublishDirectOptions): Promise<T> {
         return await this.queueProvider.publishExternalDirect(eventName, message, topic, options)
     }
 }
