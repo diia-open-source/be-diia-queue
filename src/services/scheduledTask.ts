@@ -1,53 +1,103 @@
-import { Logger, OnInit } from '@diia-inhouse/types'
+import Logger from '@diia-inhouse/diia-logger'
+import { OnInit } from '@diia-inhouse/types'
 
-import { EventBusListener, MessageHandler, ScheduledTasksQueue, SubscribeOptions } from '../interfaces'
-import { EventName, QueueName } from '../interfaces/queueConfig'
+import {
+    EventBusListener,
+    ExchangeName,
+    ExchangeType,
+    MessageBrokerServiceEventsListener,
+    PublishingResult,
+    ScheduledTasksQueue,
+} from '../interfaces'
+import { ExchangeOptions } from '../interfaces/messageBrokerServiceConfig'
+import { QueueName } from '../interfaces/queueConfig'
 import { RabbitMQProvider } from '../providers/rabbitmq'
-import * as Utils from '../utils'
-
+import Communicator from './communicator'
+import { EventCommunicator } from './eventCommunicator'
 import { EventMessageHandler } from './eventMessageHandler'
 
-export class ScheduledTask implements ScheduledTasksQueue, OnInit {
-    private readonly routingPart: string = 'scheduled-task'
+/**
+ * @deprecated use pkg-workflow entities instead
+ */
+export class ScheduledTask extends Communicator implements ScheduledTasksQueue, OnInit {
+    private readonly eventCommunicator: EventCommunicator
+
+    private readonly eventRoutingPart: string = 'scheduled-task'
 
     constructor(
-        private readonly queueProvider: RabbitMQProvider,
-        private readonly scheduledTaskList: EventBusListener[],
-        private readonly eventMessageHandler: EventMessageHandler,
+        private readonly serviceName: string,
+        systemServiceName: string,
+        queueProvider: RabbitMQProvider,
+        protected readonly scheduledTaskList: EventBusListener[],
+        eventMessageHandler: EventMessageHandler,
+        logger: Logger,
+        hostName: string,
+        private readonly queueName?: QueueName,
+    ) {
+        super(logger, queueProvider, hostName, systemServiceName)
 
-        private readonly logger: Logger,
-        private readonly queueName: QueueName | undefined,
-    ) {}
-
-    async onInit(): Promise<void> {
-        await this.queueProvider.init?.()
-        if (!this.queueName) {
-            return
-        }
-
-        const config = this.queueProvider.getConfig()
-        const eventListeners = Utils.collectEventBusListeners(this.scheduledTaskList)
-
-        await this.subscribe(
-            this.queueName,
-            this.eventMessageHandler.eventListenersMessageHandler.bind(this.eventMessageHandler, eventListeners),
-            {
-                listener: config.listenerOptions,
-            },
-        )
-
-        for (const listener of this.scheduledTaskList) {
-            this.logger.info(`Scheduled task [${listener.event}] initialized successfully`)
-        }
+        this.eventCommunicator = new EventCommunicator(logger, queueProvider, eventMessageHandler, scheduledTaskList)
     }
 
-    subscribe(subscriptionName: QueueName, messageHandler: MessageHandler, options?: SubscribeOptions): Promise<boolean> {
-        const routingKey = `${this.queueProvider.getServiceName()}.${this.routingPart}`
+    async publish(eventName: string, serviceName: string): Promise<PublishingResult> {
+        const routingKey = this.getRoutingKey(serviceName)
 
-        return this.queueProvider.subscribe(subscriptionName, messageHandler, { ...options, routingKey })
+        return await this.publishEventToExchange(eventName, {}, { routingKey })
     }
 
-    publish(scheduledTaskName: EventName, serviceName: string): Promise<boolean> {
-        return this.queueProvider.publish(scheduledTaskName, {}, { routingKey: `${serviceName}.${this.routingPart}` })
+    protected getExchangeNameWithSuffix(exchangeName: ExchangeName): string {
+        return exchangeName
+    }
+
+    protected getUnicastListeners(): MessageBrokerServiceEventsListener[] {
+        return this.eventCommunicator.getUnicastListeners()
+    }
+
+    protected getMulticastListeners(): MessageBrokerServiceEventsListener[] {
+        if (!this.queueName || this.scheduledTaskList.length === 0) {
+            return []
+        }
+
+        const routingKey = this.getRoutingKey(this.serviceName)
+
+        const [queueOptions] = this.optionsBuilder.defineQueueOptionsBasedOnGlobalConfig(this.queueName, routingKey)
+        if (!queueOptions) {
+            return []
+        }
+
+        const exchangesOptions = this.getProducerExchangesOptions()
+
+        return this.eventCommunicator.getMulticastListeners([queueOptions], exchangesOptions)
+    }
+
+    protected override getProducerExchangesOptions(): ExchangeOptions[] {
+        const exchangesOptions: ExchangeOptions[] = []
+
+        const {
+            topics = {},
+            rabbit: { declareOptions: { assertExchanges } = {} },
+        } = this.queueProvider.getConfig()
+
+        const createExchangeOptions = (exchangeName: string): ExchangeOptions => ({
+            name: exchangeName,
+            type: ExchangeType.Topic,
+            declare: assertExchanges,
+        })
+
+        const exchangeNamesByQueueName = this.optionsBuilder.getExchangeNamesByQueueName(this.queueName)
+
+        const exchangeNamesSet = new Set([...Object.keys(topics), ...exchangeNamesByQueueName])
+
+        for (const exchangeName of exchangeNamesSet) {
+            const exchangeOptions = createExchangeOptions(exchangeName)
+
+            exchangesOptions.push(exchangeOptions)
+        }
+
+        return exchangesOptions
+    }
+
+    private getRoutingKey(serviceName: string): string {
+        return `${serviceName}.${this.eventRoutingPart}`
     }
 }

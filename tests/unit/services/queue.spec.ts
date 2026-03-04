@@ -1,92 +1,153 @@
-const validateAndGetQueueConfigs = jest.fn()
-const rabbitMQProviderMock = {
-    getStatus: jest.fn(),
-    init: jest.fn(),
-}
-
-class RabbitMQProvider {
-    getStatus(): unknown {
-        return rabbitMQProviderMock.getStatus()
-    }
-
-    async init(): Promise<void> {
-        rabbitMQProviderMock.init()
-    }
-}
-
-jest.mock('@src/providers/rabbitmq', () => ({ RabbitMQProvider }))
-jest.mock('@src/utils', () => ({ validateAndGetQueueConfigs }))
-
 import { HttpStatusCode } from '@diia-inhouse/types'
 
-import { connectOptions } from '../../mocks/services/queue'
+import { ConnectionStatus, ExchangeOptions, ExchangeType, MessageBrokerServiceConfig, Queue, QueueOptions } from '@src/index'
+import { RabbitMQProvider } from '@src/providers/rabbitmq'
+
+import { getConnectOptions } from '@mocks/config'
+
+import { makeMockMetricsService } from '@tests/mocks/services/metricsService'
+
 import { asyncLocalStorage, logger } from '../mocks'
 
-import { ConnectionStatus, Queue } from '@src/index'
-
 describe('Queue', () => {
-    const serviceName = 'Auth'
-    const queueService = new Queue(serviceName, connectOptions, asyncLocalStorage, logger)
+    const systemServiceName = 'Auth'
+    const metricsService = makeMockMetricsService()
+    const defaultConnectOptions = getConnectOptions()
+    const defaultQueueService = new Queue(systemServiceName, metricsService, defaultConnectOptions, asyncLocalStorage, logger)
 
     describe('method: `onHealthCheck`', () => {
-        it('should return ok status', async () => {
-            const expectedConnectionStatus = {
-                listener: ConnectionStatus.Connected,
+        const cases = [
+            {
+                description: 'should return ok status',
+                expectedConnectionStatus: {
+                    listener: ConnectionStatus.Connected,
+                    publisher: ConnectionStatus.Connected,
+                },
+                expectedStatus: HttpStatusCode.OK,
+            },
+            {
+                description: 'should return service unavailable status',
+                expectedConnectionStatus: {
+                    listener: ConnectionStatus.Connected,
+                    publisher: ConnectionStatus.Connecting,
+                },
+                expectedStatus: HttpStatusCode.SERVICE_UNAVAILABLE,
+            },
+        ]
+
+        it('should pass health check when listener is not initialized (publish-only mode)', async () => {
+            // Arrange
+            const taskRabbitMQProvider = defaultQueueService.makeInternalRabbitMQProvider('task')
+            const eventBusRabbitMQProvider = defaultQueueService.makeInternalRabbitMQProvider('eventBus')
+            const scheduledTaskRabbitMQProvider = defaultQueueService.makeInternalRabbitMQProvider('scheduledTask')
+            const externalEventBusRabbitMQProvider = defaultQueueService.makeExternalRabbitMQProvider('externalEventBus')
+
+            const publishOnlyStatus = {
                 publisher: ConnectionStatus.Connected,
             }
 
-            validateAndGetQueueConfigs.mockReturnValue({})
-            rabbitMQProviderMock.getStatus.mockReturnValue(expectedConnectionStatus)
-            queueService.getInternalQueue()
+            vi.spyOn(taskRabbitMQProvider, 'getStatus').mockReturnValue(publishOnlyStatus)
+            vi.spyOn(eventBusRabbitMQProvider, 'getStatus').mockReturnValue(publishOnlyStatus)
+            vi.spyOn(scheduledTaskRabbitMQProvider, 'getStatus').mockReturnValue(publishOnlyStatus)
+            vi.spyOn(externalEventBusRabbitMQProvider, 'getStatus').mockReturnValue(publishOnlyStatus)
 
-            const result = await queueService.onHealthCheck()
+            // Act
+            const result = await defaultQueueService.onHealthCheck()
 
+            // Assert
+            expect(result.status).toEqual(HttpStatusCode.OK)
+        })
+
+        it.each(cases)('$description', async (params) => {
+            // Arrange
+            const { expectedConnectionStatus, expectedStatus } = params
+            const taskRabbitMQProvider = defaultQueueService.makeInternalRabbitMQProvider('task')
+            const eventBusRabbitMQProvider = defaultQueueService.makeInternalRabbitMQProvider('eventBus')
+            const scheduledTaskRabbitMQProvider = defaultQueueService.makeInternalRabbitMQProvider('scheduledTask')
+            const externalEventBusRabbitMQProvider = defaultQueueService.makeExternalRabbitMQProvider('externalEventBus')
+
+            vi.spyOn(taskRabbitMQProvider, 'getStatus').mockReturnValue(expectedConnectionStatus)
+            vi.spyOn(eventBusRabbitMQProvider, 'getStatus').mockReturnValue(expectedConnectionStatus)
+            vi.spyOn(scheduledTaskRabbitMQProvider, 'getStatus').mockReturnValue(expectedConnectionStatus)
+            vi.spyOn(externalEventBusRabbitMQProvider, 'getStatus').mockReturnValue(expectedConnectionStatus)
+
+            // Act
+            const result = await defaultQueueService.onHealthCheck()
+
+            // Assert
             await expect(result).toEqual({
-                status: HttpStatusCode.OK,
+                status: expectedStatus,
                 details: {
                     rabbit: {
-                        internal: expectedConnectionStatus,
+                        internal: {
+                            task: expectedConnectionStatus,
+                            eventBus: expectedConnectionStatus,
+                            scheduledTask: expectedConnectionStatus,
+                        },
+                        external: {
+                            externalEventBus: expectedConnectionStatus,
+                        },
                     },
                 },
             })
         })
+    })
 
-        it('should return service unavailable status', async () => {
-            const expectedConnectionStatus = {
-                listener: ConnectionStatus.Connected,
-                publisher: ConnectionStatus.Connecting,
+    describe('method: `makeInternalRabbitMQProvider`', () => {
+        it('should successfully return rabbit mq provider', () => {
+            expect(defaultQueueService.makeInternalRabbitMQProvider('task')).toBeInstanceOf(RabbitMQProvider)
+            expect(defaultQueueService.makeInternalRabbitMQProvider('eventBus')).toBeInstanceOf(RabbitMQProvider)
+            expect(defaultQueueService.makeInternalRabbitMQProvider('eventBus')).toBeInstanceOf(RabbitMQProvider)
+        })
+        it('should successfully return internal rabbit mq provider', () => {
+            // Arrange
+            const alternateExchangeOptions: ExchangeOptions = {
+                name: 'AlternateExchange',
+                type: ExchangeType.Fanout,
+            }
+            const alternateQueueOptions: QueueOptions = {
+                name: 'AlternateQueue',
+                bindTo: [{ exchangeName: alternateExchangeOptions.name }],
             }
 
-            validateAndGetQueueConfigs.mockReturnValue({})
-            rabbitMQProviderMock.getStatus.mockReturnValue(expectedConnectionStatus)
-            queueService.getInternalQueue()
+            const taskExchangeOptions: ExchangeOptions = {
+                name: 'TaskExchange',
+                type: ExchangeType.Topic,
+            }
 
-            const result = await queueService.onHealthCheck()
+            const taskQueueOptions: QueueOptions = {
+                name: 'TaskQueue',
+                bindTo: [{ exchangeName: taskExchangeOptions.name }],
+            }
 
-            expect(result).toEqual({
-                status: HttpStatusCode.SERVICE_UNAVAILABLE,
-                details: {
-                    rabbit: {
-                        internal: expectedConnectionStatus,
-                    },
+            const connectionOptions = getConnectOptions({
+                general: {
+                    queuesOptions: [alternateQueueOptions],
+                    exchangesOptions: [alternateExchangeOptions],
+                },
+                task: {
+                    queuesOptions: [taskQueueOptions],
+                    exchangesOptions: [taskExchangeOptions],
                 },
             })
-        })
-    })
 
-    describe('method: `getInternalQueue`', () => {
-        it('should successfully return internal queue', () => {
-            expect(queueService.getInternalQueue()).toBeInstanceOf(RabbitMQProvider)
-        })
-    })
+            const queueService = new Queue(systemServiceName, metricsService, connectionOptions, asyncLocalStorage, logger)
+            const rabbitMQProvider = queueService.makeInternalRabbitMQProvider('task')
 
-    describe('method: `getExternalQueue`', () => {
-        it('should successfully return external queue', () => {
-            validateAndGetQueueConfigs.mockReturnValue({
-                serviceConfig: {},
-                queueConfig: {},
+            // Act
+            const messageBrokerServiceConfig = rabbitMQProvider.getMessageBrokerServiceConfig()
+
+            // Assert
+            expect(messageBrokerServiceConfig).toEqual<MessageBrokerServiceConfig>({
+                queuesOptions: [taskQueueOptions, alternateQueueOptions],
+                exchangesOptions: [taskExchangeOptions, alternateExchangeOptions],
             })
-            expect(queueService.getExternalQueue()).toBeInstanceOf(RabbitMQProvider)
+        })
+    })
+
+    describe('method: `makeExternalRabbitMQProvider`', () => {
+        it('should successfully return rabbit mq provider', () => {
+            expect(defaultQueueService.makeExternalRabbitMQProvider('externalEventBus')).toBeInstanceOf(RabbitMQProvider)
         })
     })
 })

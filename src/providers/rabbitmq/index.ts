@@ -1,35 +1,38 @@
-import { type AsyncLocalStorage } from 'node:async_hooks'
+import { AsyncLocalStorage } from 'node:async_hooks'
 import { randomUUID } from 'node:crypto'
 import { EventEmitter } from 'node:events'
 
-import { isEmpty, merge } from 'lodash'
+import { merge } from 'lodash'
 import pTimeout from 'p-timeout'
 
+import { MetricsService } from '@diia-inhouse/diia-metrics'
+import { InternalServerError } from '@diia-inhouse/errors'
 import { Logger } from '@diia-inhouse/types'
 
+import constants from '../../constants'
+import { ConnectionStatus, PublishingResult, emptyMessageBrokerServiceConfig } from '../../interfaces'
+import { ExchangeOptions, MessageBrokerServiceConfig, QueueOptions } from '../../interfaces/messageBrokerServiceConfig'
 import { MessageHandler } from '../../interfaces/messageHandler'
+import { PublishDirectOptions, PublishOptions } from '../../interfaces/options'
 import {
-    ListenerOptions,
-    PublishDirectOptions,
-    PublishExternalEventOptions,
-    PublishInternalEventOptions,
-    SubscribeOptions,
-} from '../../interfaces/options'
-import { ConnectionClientType, ConnectionList, ConnectionStatus, RabbitMQConfig, RabbitMQStatus } from '../../interfaces/providers/rabbitmq'
-import { ExchangeType, MessageHeaders, MessagePayload, PublishToExchangeParams } from '../../interfaces/providers/rabbitmq/amqpPublisher'
+    ConnectionClientType,
+    ConnectionList,
+    ExportConfig,
+    QueueMessageData,
+    RabbitMQConfig,
+    RabbitMQStatus,
+} from '../../interfaces/providers/rabbitmq'
+import { MessageHeaders } from '../../interfaces/providers/rabbitmq/amqpPublisher'
 import {
     EventName,
-    ExternalServiceConfig,
-    InternalServiceConfig,
     QueueConfigByQueueName,
-    QueueConfigType,
     QueueName,
     ServiceConfigByConfigType,
-    Topic,
     TopicConfigByConfigType,
 } from '../../interfaces/queueConfig'
 import { QueueContext } from '../../interfaces/queueContext'
-
+import RabbitMQMetricsService from '../../services/metrics'
+import { AmqpAsserter } from './amqpAsserter'
 import { AmqpConnection } from './amqpConnection'
 import { AmqpListener } from './amqpListener'
 import { AmqpPublisher } from './amqpPublisher'
@@ -38,71 +41,75 @@ import { AmqpPublisher } from './amqpPublisher'
 export class RabbitMQProvider extends EventEmitter {
     private initializingLock?: Promise<void>
 
-    private listener: AmqpListener
+    private listener?: AmqpListener
 
-    private publisher: AmqpPublisher
+    private publisher?: AmqpPublisher
+
+    private asserter?: AmqpAsserter
 
     private connectionList: ConnectionList = {
         [ConnectionClientType.Listener]: {},
+        [ConnectionClientType.Asserter]: {},
         [ConnectionClientType.Publisher]: {},
     }
 
-    private readonly projectName: string = 'diia'
+    private readonly publisherIsNotInitializedErrorMsg = 'Publisher is not initialized'
 
-    private readonly portalName: string = 'portal'
-
-    private eventNameToTopicMap: Map<EventName, Topic> = new Map()
-
-    private externalPublishEventsSet: Set<EventName>
-
-    private externalSubscribeEventsSet: Set<EventName>
-
-    private assertExternalExchanges?: boolean
+    private readonly rabbitMQMetricsService: RabbitMQMetricsService
 
     constructor(
-        private readonly serviceName: string,
+        private readonly systemServiceName: string,
         private readonly rabbitmqConfig: RabbitMQConfig,
         private readonly serviceConfig: ServiceConfigByConfigType,
         private readonly topicsConfig: TopicConfigByConfigType,
         private readonly portalEvents: EventName[],
-        private readonly internalEvents: EventName[],
-        private readonly type: QueueConfigType,
         private readonly logger: Logger,
+        private readonly metrics: MetricsService,
         private readonly asyncLocalStorage?: AsyncLocalStorage<QueueContext>,
         private readonly queuesConfig?: QueueConfigByQueueName,
+        private readonly messageBrokerServiceConfig?: MessageBrokerServiceConfig,
     ) {
         super()
 
-        for (const topicName of Object.keys(this.topicsConfig)) {
-            for (const eventName of this.topicsConfig[topicName].events) {
-                this.eventNameToTopicMap.set(eventName, topicName)
+        this.rabbitMQMetricsService = new RabbitMQMetricsService(this.metrics)
+    }
+
+    getConfig(): ExportConfig {
+        return {
+            topics: this.topicsConfig,
+            rabbit: this.rabbitmqConfig,
+            service: this.serviceConfig,
+            portalEvents: this.portalEvents,
+            queues: this.queuesConfig ?? {},
+        }
+    }
+
+    getMessageBrokerServiceConfig(): MessageBrokerServiceConfig {
+        if (!this.messageBrokerServiceConfig) {
+            return {
+                queuesOptions: [],
+                exchangesOptions: [],
             }
         }
 
-        if (this.type === QueueConfigType.External) {
-            const config: ExternalServiceConfig = <ExternalServiceConfig>this.serviceConfig
-
-            this.externalPublishEventsSet = new Set(config?.publish)
-            this.externalSubscribeEventsSet = new Set(config?.subscribe)
-            this.assertExternalExchanges = rabbitmqConfig.assertExchanges
-        }
+        return this.messageBrokerServiceConfig
     }
 
-    getServiceName(): string {
-        return this.serviceName
-    }
+    async init(config: MessageBrokerServiceConfig = emptyMessageBrokerServiceConfig): Promise<void> {
+        const { queuesOptions, exchangesOptions } = config
 
-    getConfig(): RabbitMQConfig {
-        return this.rabbitmqConfig
-    }
-
-    async init(listenerOptions?: ListenerOptions): Promise<void> {
         if (this.initializingLock) {
             return await this.initializingLock
         }
 
-        this.initializingLock = new Promise((resolve: () => void) =>
-            Promise.all([this.setListener(listenerOptions), this.setPublisher()]).then(() => resolve()),
+        const tasks: Promise<unknown>[] = [this.setPublisher(), this.setAsserter(queuesOptions, exchangesOptions)]
+
+        if (this.rabbitmqConfig.consumerEnabled !== false && queuesOptions.length > 0) {
+            tasks.push(this.setListener(queuesOptions))
+        }
+
+        this.initializingLock = Promise.all(tasks).then(() =>
+            this.logger.info(`RabbitMQ provider has been initialized by options`, { queuesOptions, exchangesOptions }),
         )
 
         await this.initializingLock
@@ -110,301 +117,71 @@ export class RabbitMQProvider extends EventEmitter {
         this.emit('initialized')
     }
 
-    async subscribe(subscriptionName: QueueName, messageHandler: MessageHandler, options?: SubscribeOptions): Promise<boolean> {
-        if (!(<InternalServiceConfig>this.serviceConfig).subscribe?.includes(subscriptionName)) {
-            this.logger.error(`Subscription [${subscriptionName}] is not related to the service [${this.serviceName}]`)
-
-            return false
-        }
-
-        const queueName: string = this.makeQueueName(subscriptionName, options)
-
-        await this.init(options?.listener)
-
-        await this.listener.listenQueue(queueName, messageHandler)
-        if (isEmpty(this.queuesConfig[subscriptionName].topics)) {
-            this.logger.info(`Can't find topics for subscription [${subscriptionName}]`)
-
-            return true
-        }
-
-        const routingKey: string = options ? options.routingKey : undefined
-
-        await Promise.all(
-            this.queuesConfig[subscriptionName].topics.map((topic: Topic) => this.checkAndBindToExchange(topic, queueName, routingKey)),
-        )
+    async subscribe(queueName: QueueName, messageHandler: MessageHandler): Promise<boolean> {
+        await this.listener?.listenQueue(queueName, messageHandler)
 
         return true
     }
 
-    async publish(eventName: EventName, message: MessagePayload, options?: PublishInternalEventOptions): Promise<boolean> {
-        if (!this.internalEvents.includes(eventName)) {
-            this.logger.error(`Event [${eventName}] is not implemented`)
+    async unsubscribe(queueName: QueueName): Promise<void> {
+        await this.listener?.cancelQueue(queueName)
+    }
 
-            return false
-        }
+    async publish(
+        message: QueueMessageData,
+        exchangeName: string,
+        routingKey: string = constants.DEFAULT_ROUTING_KEY,
+        options?: PublishOptions,
+    ): Promise<PublishingResult> {
+        const { publishTimeout = Infinity, throwOnPublishTimeout = true, delay } = options || {}
 
-        const exchangeName: Topic = <Topic>this.findTopicNameByEventName(eventName)
-        if (!exchangeName) {
-            this.logger.error(`Can't find topic name by event [${eventName}]`)
+        const publishTask = async (): Promise<PublishingResult> => {
+            const headers = this.preparePublisherHeaders(delay)
 
-            return false
-        }
-
-        if (!(<InternalServiceConfig>this.serviceConfig).publish?.includes(exchangeName)) {
-            this.logger.error(`Event [${eventName}] is not allowed to publish by service [${this.serviceName}]`)
-
-            return false
-        }
-
-        const { publishTimeout = Infinity, throwOnPublishTimeout = true, routingKey } = options || {}
-
-        // eslint-disable-next-line no-async-promise-executor
-        const publishTask = new Promise<boolean>(async (resolve, reject) => {
-            try {
-                await this.init()
-            } catch (err) {
-                return reject(err)
+            if (!this.publisher) {
+                throw new Error(this.publisherIsNotInitializedErrorMsg)
             }
 
-            try {
-                await this.publisher.checkExchange(exchangeName)
-            } catch {
-                return resolve(false)
-            }
+            return await this.publisher?.publishToExchange(exchangeName, message, headers, routingKey)
+        }
 
-            try {
-                const publishResult = await this.publisher.publishToExchange({
-                    eventName,
-                    message,
-                    exchangeName,
-                    routingKey,
-                    headers: this.preparePublisherHeaders(),
-                })
-
-                return resolve(publishResult)
-            } catch (err) {
-                return reject(err)
-            }
-        })
-
-        const timeoutMsg = `Internal event [${eventName}] publish timeout exceed`
+        const timeoutMsg = `Publishing message to ${exchangeName} exchange with ${routingKey} routing key timeout exceed`
 
         if (throwOnPublishTimeout) {
-            return await pTimeout(publishTask, publishTimeout, timeoutMsg)
+            return await pTimeout(publishTask(), publishTimeout, timeoutMsg)
         }
 
-        return await pTimeout(publishTask, publishTimeout, () => {
+        return await pTimeout(publishTask(), publishTimeout, () => {
             this.logger.error(timeoutMsg, { publishTimeout })
 
-            return false
+            throw new InternalServerError(timeoutMsg)
         })
-    }
-
-    async subscribeTask(queueName: string, messageHandler: MessageHandler, options: SubscribeOptions = {}): Promise<boolean> {
-        const { listener, delayed } = options
-
-        this.logger.info('Subscribing to the task', { queueName, options })
-
-        await this.init(listener)
-
-        await this.listener.listenQueue(queueName, messageHandler)
-        await (delayed
-            ? this.publisher.checkExchange(queueName, ExchangeType.XDelayedMessage, {
-                  arguments: { 'x-delayed-type': this.publisher.defaultExchangeType },
-              })
-            : this.publisher.checkExchange(queueName))
-
-        await this.listener.bindQueueToExchange(queueName, queueName)
-
-        return true
-    }
-
-    async publishTask(queueName: string, message: MessagePayload, delay?: number): Promise<boolean> {
-        await this.init()
-
-        const params: PublishToExchangeParams = {
-            eventName: queueName,
-            message,
-            exchangeName: queueName,
-            headers: this.preparePublisherHeaders(),
-        }
-
-        if (delay) {
-            params.headers['x-delay'] = delay
-        }
-
-        return await this.publisher.publishToExchange(params)
-    }
-
-    async subscribeExternal(messageHandler: MessageHandler, options?: SubscribeOptions): Promise<boolean> {
-        await this.init(options.listener)
-
-        const config: ExternalServiceConfig | undefined = <ExternalServiceConfig>this.serviceConfig
-        const publishEvents: EventName[] = config?.publish || []
-        const subscribeEvents: EventName[] = config?.subscribe || []
-        if (publishEvents.length === 0 && subscribeEvents.length === 0) {
-            this.logger.info('No one external events to listen')
-
-            return
-        }
-
-        const responseRoutingKeyPrefix: string | undefined = this.rabbitmqConfig.custom?.responseRoutingKeyPrefix
-        const queueByEvent: Map<EventName, string> = new Map()
-
-        for (const externalEvent of publishEvents) {
-            queueByEvent.set(externalEvent, this.makeExternalResQueueName(externalEvent, responseRoutingKeyPrefix))
-        }
-
-        for (const externalEvent of subscribeEvents) {
-            queueByEvent.set(externalEvent, this.makeExternalReqQueueName(externalEvent, responseRoutingKeyPrefix))
-        }
-
-        const bindTasks: Promise<void>[] = [...queueByEvent.entries()].map(([event, queueName]: [EventName, string]) =>
-            this.bindQueueToExternalExchange(queueName, event, messageHandler),
-        )
-
-        await Promise.all(bindTasks)
-
-        return true
     }
 
     async publishExternalDirect<T>(
-        eventName: EventName,
-        message: MessagePayload,
-        topic?: Topic,
+        message: QueueMessageData,
+        exchangeName: string,
+        routingKey: string = constants.DEFAULT_ROUTING_KEY,
         options?: PublishDirectOptions,
     ): Promise<T> {
-        await this.init()
-
-        const selectedTopic = topic ?? this.findTopicNameByEventName(eventName) ?? 'DirectRPC'
-        const exchangeName: string = this.prepareExternalTopicName(selectedTopic)
-        const routingKey: string = this.prepareExternalReqRoutingKey(eventName)
         const headers = this.preparePublisherHeaders()
 
-        return await this.publisher.publishToExchangeDirect({
-            eventName,
-            message,
-            exchangeName,
-            routingKey,
-            headers,
-            options,
-        })
-    }
-
-    async publishExternal(eventName: EventName, message: MessagePayload, options?: PublishExternalEventOptions): Promise<boolean> {
-        const topicName: Topic = this.findTopicNameByEventName(eventName)
-        if (!topicName) {
-            this.logger.error(`Can't find external topic name for service [${this.serviceName}] and event [${eventName}]`)
-
-            return false
+        if (!this.publisher) {
+            throw new Error(this.publisherIsNotInitializedErrorMsg)
         }
 
-        const { publishTimeout = Infinity, throwOnPublishTimeout = true } = options || {}
-
-        // eslint-disable-next-line no-async-promise-executor
-        const publishTask = new Promise<boolean>(async (resolve, reject) => {
-            try {
-                await this.init()
-            } catch (err) {
-                return reject(err)
-            }
-
-            const headers = this.preparePublisherHeaders()
-            const exchangeName = this.prepareExternalTopicName(topicName)
-
-            const publishToExchangeParams: PublishToExchangeParams = {
-                eventName,
-                message,
-                exchangeName,
-                headers,
-                options,
-            }
-
-            if (this.externalPublishEventsSet.has(eventName)) {
-                const { responseRoutingKeyPrefix } = this.rabbitmqConfig.custom || {}
-
-                publishToExchangeParams.routingKey = this.prepareExternalReqRoutingKey(eventName)
-                publishToExchangeParams.responseRoutingKey =
-                    responseRoutingKeyPrefix && this.makeExternalResQueueName(eventName, responseRoutingKeyPrefix)
-            } else if (this.externalSubscribeEventsSet.has(eventName)) {
-                publishToExchangeParams.routingKey = this.prepareExternalResRoutingKey(eventName)
-            } else {
-                this.logger.error(`Can't find event in service config: [${eventName}]`)
-
-                return resolve(false)
-            }
-
-            try {
-                const publishResult = await this.publisher.publishToExchange(publishToExchangeParams)
-
-                return resolve(publishResult)
-            } catch (err) {
-                return reject(err)
-            }
-        })
-
-        const timeoutMsg = `External event [${eventName}] publish timeout exceed`
-
-        if (throwOnPublishTimeout) {
-            return await pTimeout(publishTask, publishTimeout, timeoutMsg)
-        }
-
-        return await pTimeout(publishTask, publishTimeout, () => {
-            this.logger.error(timeoutMsg, { publishTimeout })
-
-            return false
-        })
+        return await this.publisher?.publishToExchangeDirect<T>(exchangeName, message, headers, routingKey, options?.timeout)
     }
 
     getStatus(): RabbitMQStatus {
         return {
-            listener: this.listener?.getStatus() || ConnectionStatus.Down,
-            publisher: this.publisher?.getStatus() || ConnectionStatus.Down,
+            ...(this.listener ? { listener: this.listener.getStatus() } : {}),
+            publisher: this.publisher?.getStatus() ?? ConnectionStatus.Down,
         }
     }
 
-    private preparePublisherHeaders(): MessageHeaders {
-        const logData = this.asyncLocalStorage?.getStore()?.logData ?? {}
-        const traceId = logData?.traceId ?? randomUUID()
-        const serviceCode = logData?.serviceCode
-
-        return { traceId, serviceCode }
-    }
-
-    private findTopicNameByEventName(eventName: EventName): Topic | undefined {
-        return this.eventNameToTopicMap.get(eventName)
-    }
-
-    private async setListener(options: ListenerOptions = {}): Promise<AmqpListener> {
-        options.queueOptions ??= this.rabbitmqConfig.listenerOptions?.queueOptions
-        if (!this.listener) {
-            const connection = await this.getConnection(ConnectionClientType.Listener)
-
-            this.listener = new AmqpListener(connection, this.logger, options)
-            await this.listener.init()
-        }
-
-        return this.listener
-    }
-
-    private async setPublisher(): Promise<AmqpPublisher> {
-        if (!this.publisher) {
-            const connection = await this.getConnection(ConnectionClientType.Publisher)
-
-            this.publisher = new AmqpPublisher(connection, this.logger)
-            await this.publisher.init()
-        }
-
-        return this.publisher
-    }
-
-    private async getConnection(client: ConnectionClientType): Promise<AmqpConnection> {
-        if (this.connectionList[client].lock) {
-            return await this.connectionList[client].lock
-        }
-
-        const connection = new AmqpConnection(
+    async makeAMQPConnection(client: ConnectionClientType): Promise<AmqpConnection> {
+        return new AmqpConnection(
             this.rabbitmqConfig.connection,
             this.logger,
             this.rabbitmqConfig.reconnectOptions,
@@ -417,6 +194,62 @@ export class RabbitMQProvider extends EventEmitter {
                 this.rabbitmqConfig.socketOptions,
             ),
         )
+    }
+
+    async makeAMQPListener(queuesOptions: QueueOptions[]): Promise<AmqpListener> {
+        const connection = await this.getConnection(ConnectionClientType.Listener)
+
+        return new AmqpListener(connection, this.logger, this.rabbitMQMetricsService, queuesOptions, this.systemServiceName)
+    }
+
+    async makeAMQPAsserter(): Promise<AmqpAsserter> {
+        const connection = await this.getConnection(ConnectionClientType.Asserter)
+
+        return new AmqpAsserter(connection, this.logger, this.rabbitmqConfig.declareOptions)
+    }
+
+    async makeAMQPPublisher(): Promise<AmqpPublisher> {
+        const connection = await this.getConnection(ConnectionClientType.Publisher)
+
+        return new AmqpPublisher(connection, this.logger, this.rabbitMQMetricsService, this.systemServiceName)
+    }
+
+    private async setListener(queuesOptions: QueueOptions[]): Promise<AmqpListener> {
+        if (!this.listener) {
+            this.listener = await this.makeAMQPListener(queuesOptions)
+
+            await this.listener?.init()
+        }
+
+        return this.listener
+    }
+
+    private async setAsserter(queuesOptions: QueueOptions[], exchangesOptions: ExchangeOptions[]): Promise<AmqpAsserter> {
+        if (!this.asserter) {
+            this.asserter = await this.makeAMQPAsserter()
+
+            await this.asserter.init(exchangesOptions, queuesOptions)
+        }
+
+        return this.asserter
+    }
+
+    private async setPublisher(): Promise<AmqpPublisher> {
+        if (!this.publisher) {
+            this.publisher = await this.makeAMQPPublisher()
+
+            await this.publisher?.init()
+        }
+
+        return this.publisher
+    }
+
+    private async getConnection(client: ConnectionClientType): Promise<AmqpConnection> {
+        if (this.connectionList[client].lock) {
+            return await this.connectionList[client].lock
+        }
+
+        const connection = await this.makeAMQPConnection(client)
 
         this.connectionList[client].lock = new Promise<AmqpConnection>((resolve: (c: AmqpConnection) => void) =>
             connection.connect().then(() => resolve(connection)),
@@ -425,79 +258,16 @@ export class RabbitMQProvider extends EventEmitter {
         return await this.connectionList[client].lock
     }
 
-    private async checkAndBindToExchange(topic: string, queueName: string, routingKey?: string): Promise<void> {
-        // eslint-disable-next-line no-async-promise-executor
-        return await new Promise(async (resolve: () => void) => {
-            // queue can't be bind to exchange when no exchange
-            await this.publisher.checkExchange(topic)
-            await this.listener.bindQueueToExchange(queueName, topic, routingKey)
+    private preparePublisherHeaders(delay?: number): MessageHeaders {
+        const store = this.asyncLocalStorage?.getStore()
+        const logData = store?.logData ?? {}
+        const traceId = logData?.traceId ?? randomUUID()
+        const serviceCode = logData?.serviceCode
 
-            return resolve()
-        })
-    }
-
-    private async bindQueueToExternalExchange(queueName: string, eventName: EventName, messageHandler: MessageHandler): Promise<void> {
-        const topicName: Topic = this.findTopicNameByEventName(eventName)
-
-        if (!topicName) {
-            this.logger.error(`Can't find external topic name for service [${this.serviceName}] and event [${eventName}]`)
-
-            return
+        return {
+            traceId,
+            serviceCode,
+            ...(delay ? { 'x-delay': delay } : {}),
         }
-
-        const externalTopicName: string = this.prepareExternalTopicName(topicName)
-        if (this.assertExternalExchanges) {
-            await this.publisher.checkExchange(externalTopicName)
-        }
-
-        await this.listener.listenQueue(queueName, messageHandler)
-        await this.listener.bindQueueToExchange(queueName, externalTopicName, queueName)
-    }
-
-    private makeQueueName(subscriptionName: string, options?: SubscribeOptions): string {
-        let queueName: string = subscriptionName
-        if (options && options.queueSuffix) {
-            queueName = `${subscriptionName}_${options.queueSuffix}`
-        }
-
-        return queueName
-    }
-
-    private makeExternalResQueueName(eventName: EventName, prefix?: string): string {
-        const result = `queue.${this.projectName}.${eventName}.res`
-        if (prefix) {
-            return `${prefix}.${result}`
-        }
-
-        return result
-    }
-
-    private makeExternalReqQueueName(eventName: EventName, prefix?: string): string {
-        const result = `${this.prepareExternalQueuePrefix(eventName)}.${eventName}.req`
-        if (prefix) {
-            return `${prefix}.${result}`
-        }
-
-        return result
-    }
-
-    private prepareExternalTopicName(topicName: Topic): string {
-        return `TopicExternal${topicName}`
-    }
-
-    private prepareExternalReqRoutingKey(eventName: string): string {
-        return `queue.${this.projectName}.${eventName}.req`
-    }
-
-    private prepareExternalResRoutingKey(eventName: EventName): string {
-        return `${this.prepareExternalQueuePrefix(eventName)}.${eventName}.res`
-    }
-
-    private prepareExternalQueuePrefix(event: EventName): string {
-        if (this.portalEvents.includes(event)) {
-            return `queue.${this.portalName}`
-        }
-
-        return `queue.${this.projectName}`
     }
 }

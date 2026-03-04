@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 
 import { ConsumeMessage } from 'amqplib'
+import { MessageProperties } from 'amqplib/properties'
 
 export const validMessage: ConsumeMessage = {
     content: Buffer.from(JSON.stringify({ key: 'value' })),
@@ -27,4 +28,14 @@ export const validMessage: ConsumeMessage = {
         type: 'message',
         userId: randomUUID(),
     },
+}
+
+export function getConsumeMessageMock(properties: Partial<MessageProperties>): ConsumeMessage {
+    return {
+        ...validMessage,
+        properties: {
+            ...validMessage.properties,
+            ...properties,
+        },
+    }
 }

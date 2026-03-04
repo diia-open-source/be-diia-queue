@@ -1,5 +1,4 @@
-import { EventBusListener } from './interfaces/eventBus'
-import { EventListeners } from './interfaces/externalCommunicator'
+import { EventBusListener, EventListeners } from './interfaces'
 
 export function collectEventBusListeners(eventBusListeners: EventBusListener[]): EventListeners {
     const eventListeners: EventListeners = {}
@@ -9,4 +8,8 @@ export function collectEventBusListeners(eventBusListeners: EventBusListener[]):
     }
 
     return eventListeners
+}
+
+export function getConsumerTag(serviceName: string, hostname: string): string {
+    return `${serviceName}:${hostname}`
 }

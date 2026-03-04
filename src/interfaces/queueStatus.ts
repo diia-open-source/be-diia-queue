@@ -1,3 +1,4 @@
+import { MessageBrokerServiceType } from './messageBrokerServiceConfig'
 import { RabbitMQStatus } from './providers/rabbitmq'
 
 export enum QueueConnectionType {
@@ -5,6 +6,8 @@ export enum QueueConnectionType {
     External = 'external',
 }
 
-export type QueueStatusByType = Partial<Record<QueueConnectionType, RabbitMQStatus>>
+export type MessageBrokerServicesStatus = Partial<Record<MessageBrokerServiceType, RabbitMQStatus>>
+
+export type QueueStatusByType = Partial<Record<QueueConnectionType, MessageBrokerServicesStatus>>
 
 export type QueueStatus = { rabbit: QueueStatusByType }

@@ -1,13 +1,6 @@
-import { PublishDirectOptions } from '../../options'
-import { EventName } from '../../queueConfig'
+import { MessagePropertyHeaders } from 'amqplib/properties'
 
-export enum ExchangeType {
-    Direct = 'direct',
-    Fanout = 'fanout',
-    Topic = 'topic',
-    Headers = 'headers',
-    XDelayedMessage = 'x-delayed-message',
-}
+import { Headers } from './index'
 
 export type MessagePayload = unknown
 
@@ -17,12 +10,13 @@ export interface MessageHeaders {
     'x-delay'?: number
 }
 
-export interface PublishToExchangeParams {
-    eventName: EventName | string
-    message: MessagePayload
-    exchangeName: string
-    routingKey?: string
-    responseRoutingKey?: string
-    headers: MessageHeaders
-    options?: PublishDirectOptions
+export interface DirectResponseHeaders extends MessagePropertyHeaders {
+    [Headers.handledBy]?: string
 }
+
+export interface DirectResponse<T = unknown> extends MessagePropertyHeaders {
+    body: T
+    headers: DirectResponseHeaders
+}
+
+export type PublishingResult = void | never

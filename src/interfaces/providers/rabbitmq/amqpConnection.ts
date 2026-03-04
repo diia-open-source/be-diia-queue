@@ -30,3 +30,7 @@ export enum ConnectionStatus {
     Closed = 'closed',
     Down = 'down',
 }
+
+export const AmqpConnectionEventNames = {
+    Ready: 'ready',
+} as const

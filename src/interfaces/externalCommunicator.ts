@@ -1,25 +1,16 @@
 import { HttpStatusCode } from '@diia-inhouse/types'
 import { ValidationSchema } from '@diia-inhouse/validators'
 
-import { EventBusListener } from './eventBus'
-import { EventName, Topic } from './queueConfig'
-
-export type EventListeners = Partial<Record<EventName, EventBusListener>>
-
-export interface ReceiveOps {
-    timeout?: number
-    async?: boolean
-    requestUuid?: string
-    ignoreCache?: boolean
-    retry?: boolean
-}
+import { ExchangeName } from './messageBrokerServiceConfig'
 
 export interface ReceiveDirectOps {
-    topic?: Topic
-    validationRules?: ValidationSchema
+    registryApiVersion?: string
+    exchangeName?: ExchangeName
+    validationRules: ValidationSchema | null
     ignoreCache?: boolean
     retry?: boolean
     timeout?: number
+    requestUuid?: string
 }
 
 export interface ExternalCommunicatorResponseError {

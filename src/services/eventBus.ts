@@ -1,52 +1,88 @@
-import { Logger, OnInit } from '@diia-inhouse/types'
+import Logger from '@diia-inhouse/diia-logger'
+import { OnInit } from '@diia-inhouse/types'
 
-import { EventBusListener, EventBusQueue } from '../interfaces/eventBus'
-import { MessageHandler } from '../interfaces/messageHandler'
-import { PublishInternalEventOptions, SubscribeOptions } from '../interfaces/options'
+import {
+    EventBusListener,
+    EventBusQueue,
+    ExchangeName,
+    ExchangeType,
+    MessageBrokerServiceEventsListener,
+    PublishOptions,
+    PublishingResult,
+} from '../interfaces'
+import { ExchangeOptions } from '../interfaces/messageBrokerServiceConfig'
 import { MessagePayload } from '../interfaces/providers/rabbitmq/amqpPublisher'
-import { QueueName } from '../interfaces/queueConfig'
+import { EventName, QueueName } from '../interfaces/queueConfig'
 import { RabbitMQProvider } from '../providers/rabbitmq'
-import * as Utils from '../utils'
-
+import Communicator from './communicator'
+import { EventCommunicator } from './eventCommunicator'
 import { EventMessageHandler } from './eventMessageHandler'
 
-export class EventBus implements EventBusQueue, OnInit {
+export class EventBus extends Communicator implements EventBusQueue, OnInit {
+    private readonly eventCommunicator: EventCommunicator
+
     constructor(
-        private readonly queueProvider: RabbitMQProvider,
+        queueProvider: RabbitMQProvider,
         private readonly eventListenerList: EventBusListener[],
-        private readonly eventMessageHandler: EventMessageHandler,
+        eventMessageHandler: EventMessageHandler,
+        logger: Logger,
+        hostName: string,
+        systemServiceName: string,
+        private readonly queueName?: QueueName,
+    ) {
+        super(logger, queueProvider, hostName, systemServiceName)
 
-        private readonly logger: Logger,
-        private readonly queueName: QueueName | undefined,
-    ) {}
+        this.eventCommunicator = new EventCommunicator(logger, queueProvider, eventMessageHandler, eventListenerList)
+    }
 
-    async onInit(): Promise<void> {
-        await this.queueProvider.init?.()
+    async publish(eventName: EventName, payload: MessagePayload, options?: PublishOptions): Promise<PublishingResult> {
+        return await this.publishEventToExchange(eventName, payload, options)
+    }
+
+    protected getExchangeNameWithSuffix(exchangeName: ExchangeName): string {
+        return exchangeName
+    }
+
+    protected getUnicastListeners(): MessageBrokerServiceEventsListener[] {
+        return this.eventCommunicator.getUnicastListeners()
+    }
+
+    protected getProducerExchangesOptions(): ExchangeOptions[] {
         if (!this.queueName) {
-            return
+            return []
         }
 
-        const config = this.queueProvider.getConfig()
-        const eventListeners = Utils.collectEventBusListeners(this.eventListenerList)
+        const {
+            rabbit: { declareOptions: { assertExchanges } = {} },
+        } = this.queueProvider.getConfig()
 
-        await this.subscribe(
-            this.queueName,
-            this.eventMessageHandler.eventListenersMessageHandler.bind(this.eventMessageHandler, eventListeners),
-            {
-                listener: config.listenerOptions,
-            },
-        )
+        const exchangeNames = this.optionsBuilder.getExchangeNamesByQueueName(this.queueName)
 
-        for (const listener of this.eventListenerList) {
-            this.logger.info(`Event listener [${listener.event}] initialized successfully`)
+        const exchangesOptions: ExchangeOptions[] = []
+
+        for (const exchangeName of exchangeNames) {
+            exchangesOptions.push({
+                name: exchangeName,
+                declare: assertExchanges,
+                type: ExchangeType.Topic,
+            })
         }
+
+        return exchangesOptions
     }
 
-    async subscribe(subscriptionName: QueueName, messageHandler: MessageHandler, options?: SubscribeOptions): Promise<boolean> {
-        return await this.queueProvider.subscribe(subscriptionName, messageHandler, options)
-    }
+    protected getMulticastListeners(): MessageBrokerServiceEventsListener[] {
+        if (!this.queueName || this.eventListenerList.length === 0) {
+            return []
+        }
 
-    async publish(eventName: QueueName, message: MessagePayload, options?: PublishInternalEventOptions): Promise<boolean> {
-        return await this.queueProvider.publish(eventName, message, options)
+        const [queueOptions] = this.optionsBuilder.defineQueueOptionsBasedOnGlobalConfig(this.queueName)
+        if (!queueOptions) {
+            return []
+        }
+
+        const exchangesOptions = this.getProducerExchangesOptions()
+
+        return this.eventCommunicator.getMulticastListeners([queueOptions], exchangesOptions)
     }
 }

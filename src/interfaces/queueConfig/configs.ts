@@ -1,8 +1,8 @@
+import { ExchangeName, MessageBrokerServicesConfig } from '../messageBrokerServiceConfig'
+
 export type EventName = string
 
 export type QueueName = string
-
-export type Topic = string
 
 export enum QueueConfigType {
     Internal = 'internal',
@@ -11,31 +11,39 @@ export enum QueueConfigType {
 
 export interface InternalServiceConfig {
     subscribe?: QueueName[]
-    publish?: Topic[]
+    publish?: ExchangeName[]
 }
 
 export interface ExternalServiceConfig {
-    publish: EventName[]
+    /**
+     * add an event to this field only in cases when you don't need to await a response to an event;
+     * in other cases, use the *receiveDirect* mechanism
+     * */
+    publish?: EventName[]
     subscribe: EventName[]
 }
 
 export type ServiceConfigByConfigType = InternalServiceConfig | ExternalServiceConfig
 
 export interface ServiceConfig {
-    [QueueConfigType.Internal]: InternalServiceConfig
-    [QueueConfigType.External]: ExternalServiceConfig
+    /**
+     * @deprecated no need to set the internal service queues config, because it is used nowhere.
+     * it should be deleted from a service config
+     * */
+    [QueueConfigType.Internal]?: InternalServiceConfig
+    [QueueConfigType.External]?: ExternalServiceConfig
 }
 
 export type QueueConfigByQueueName = {
-    [k in QueueName]?: {
-        topics: Topic[]
+    [k in QueueName]: {
+        topics: ExchangeName[]
     }
 }
 
 export type QueueConfig = Record<QueueConfigType.Internal, QueueConfigByQueueName>
 
 export type TopicConfigByConfigType = {
-    [k in Topic]?: {
+    [k in ExchangeName]: {
         events: EventName[]
     }
 }
@@ -43,9 +51,9 @@ export type TopicConfigByConfigType = {
 export type TopicConfig = Record<QueueConfigType, TopicConfigByConfigType>
 
 export type ServiceRulesConfig = {
-    servicesConfig: ServiceConfig
     topicsConfig: TopicConfig
     queuesConfig: QueueConfig
-    portalEvents: EventName[]
-    internalEvents: EventName[]
+    portalEvents?: EventName[]
+    servicesConfig?: ServiceConfig
+    messageBrokerServices?: MessageBrokerServicesConfig
 }

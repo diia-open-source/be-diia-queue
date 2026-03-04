@@ -3,26 +3,32 @@ import { randomUUID } from 'node:crypto'
 
 import { isValidTraceId, trace } from '@opentelemetry/api'
 
-import { ValidationError } from '@diia-inhouse/errors'
-import { PubSubService } from '@diia-inhouse/redis'
-import { AlsData, Logger } from '@diia-inhouse/types'
+import Logger from '@diia-inhouse/diia-logger'
+import { ApiError, ValidationError } from '@diia-inhouse/errors'
+import { AlsData } from '@diia-inhouse/types'
 import { utils } from '@diia-inhouse/utils'
-import { ValidationSchema } from '@diia-inhouse/validators'
 
-import { EventBusListener, QueueContext, QueueMessage, QueueMessageData, TaskListener } from '../interfaces'
-import { EventListeners } from '../interfaces/externalCommunicator'
+import {
+    EventBusListener,
+    EventListeners,
+    Listener,
+    MessageProperties,
+    NackOptions,
+    QueueContext,
+    QueueMessage,
+    QueueMessageData,
+    QueueMessageError,
+    TaskListener,
+} from '../interfaces'
 import { EventName } from '../interfaces/queueConfig'
-import { totalMessageHandlerErrorsMetrics } from '../metrics'
-
+import { ValidationResult } from '../interfaces/services/eventMessageHandler'
 import { EventMessageValidator } from './eventMessageValidator'
-import { ExternalCommunicatorChannel } from './externalCommunicatorChannel'
 
 export class EventMessageHandler {
+    private readonly noRequeueNackOptions = new NackOptions(false, false)
+
     constructor(
         private readonly eventMessageValidator: EventMessageValidator,
-        private readonly externalChannel: ExternalCommunicatorChannel,
-
-        private readonly pubsub: PubSubService,
         private readonly asyncLocalStorage: AsyncLocalStorage<QueueContext>,
         private readonly logger: Logger,
     ) {}
@@ -32,142 +38,134 @@ export class EventMessageHandler {
             return
         }
 
-        const listener = eventListeners[<EventName>message.data.event]
+        const listener = eventListeners[message.data.event as EventName]
 
         await this.eventListenerMessageHandler(listener, message)
     }
 
     async eventListenerMessageHandler(listener: EventBusListener | TaskListener | undefined, message: QueueMessage): Promise<void> {
-        const payloadValidationSchema = listener?.validationRules || {}
-        const { done, data, properties } = message
-        const { event, payload, meta } = data
-        const activeSpanTraceId = trace.getActiveSpan()?.spanContext().traceId
-        const traceId = isValidTraceId(activeSpanTraceId) ? activeSpanTraceId : properties.headers?.traceId || randomUUID()
-        const context: AlsData = {
-            logData: {
-                traceId,
-                serviceCode: this.getServiceCode(listener, payload),
-            },
-        }
+        const {
+            done,
+            properties,
+            data: { event, payload },
+        } = message
+
+        const serviceCode = this.getServiceCode(listener, payload)
+        const context = this.prepareAsyncContext(properties, serviceCode)
 
         await this.asyncLocalStorage.run(context, async () => {
             this.logger.info(`Handling event [${event}] with payload`, { payload })
             if (!listener) {
-                this.logger.info(`No listener for the event [${event}]`)
+                this.logger.info(`Not found listener for the event [${event}]`)
 
                 return done()
             }
 
-            if ('isSync' in listener && listener.isSync) {
-                return await this.syncMessageHandler(listener, message, payloadValidationSchema)
-            }
-
-            try {
-                this.eventMessageValidator.validateEventMessage(data, payloadValidationSchema)
-                const resp = await listener.handler?.(payload, meta)
-
-                return this.performDone(message, resp, false)
-            } catch (err) {
-                if (err instanceof ValidationError && 'validationErrorHandler' in listener && payload?.uuid) {
-                    await listener.validationErrorHandler?.(err, payload.uuid).catch((err_) => err_)
-                }
-
-                this.logger.error(`Failed to handle event ${event}`, { err })
-
-                totalMessageHandlerErrorsMetrics.increment({ event })
-
-                // TODO(BACK-0): message.reject();
-                return this.performDone(message, err, true)
-            }
+            return await this.handleMessage(listener, message)
         })
     }
 
-    private async syncMessageHandler(
-        listener: EventBusListener | undefined,
-        message: QueueMessage,
-        payloadValidationSchema: ValidationSchema,
-    ): Promise<void> {
-        const { done, data } = message
-        const { event, payload, meta } = data
-        if (!payload?.uuid) {
-            this.logger.error('Missing uuid in the message payload')
+    private prepareAsyncContext(properties: MessageProperties, serviceCode?: string): AlsData {
+        const activeSpanTraceId = trace.getActiveSpan()?.spanContext().traceId ?? ''
+        const traceId = isValidTraceId(activeSpanTraceId) ? activeSpanTraceId : properties.headers?.traceId || randomUUID()
 
-            return done()
+        return {
+            logData: {
+                traceId,
+                serviceCode,
+            },
+        }
+    }
+
+    private async handleMessage(listener: EventBusListener | TaskListener, message: QueueMessage): Promise<void> {
+        const {
+            data,
+            done,
+            reject,
+            properties: { replyTo, correlationId },
+        } = message
+        const { event, payload, meta } = data
+
+        const useDirectReply = replyTo && correlationId
+
+        let hasErrorOccurred = false
+        let result: unknown | void | NackOptions
+
+        const { isValid, error } = await this.validateData(data, listener)
+
+        if (!isValid) {
+            if (useDirectReply && error) {
+                return this.directReplyDone(message, error, true)
+            }
+
+            return reject(this.noRequeueNackOptions)
         }
 
-        const channel = this.externalChannel.getChannel(<EventName>event, payload.uuid)
-        const isChannelActive = await this.externalChannel.isChannelActive(channel)
+        try {
+            result = await listener.handler?.(payload, meta)
+        } catch (err) {
+            result = err
+            hasErrorOccurred = true
 
-        if (!isChannelActive && listener.handler) {
-            try {
-                this.eventMessageValidator.validateSyncedEventMessage(data, payloadValidationSchema)
-            } catch (err) {
-                this.logger.error(`Message in a wrong format was received from a synced event: ${event}`, { err })
+            this.logger.error(`Failed to handle event ${event}`, { err })
+        }
 
-                return done()
-            }
+        if (useDirectReply) {
+            return this.directReplyDone(message, result, hasErrorOccurred)
+        }
 
-            if (payload.error) {
-                this.logger.error(`Error received for a synced event: ${event}`, payload.error)
-
-                return done()
-            }
-
-            try {
-                await listener.handler(payload, meta)
-            } catch (err) {
-                this.logger.error(`Failed to handle the synced event [${event}] with payload`, { err })
-            }
-        } else {
-            await this.pubsub.publish(channel, data)
+        if (result instanceof NackOptions) {
+            return reject(result)
+        } else if (hasErrorOccurred && listener.nackOptions) {
+            return reject(listener.nackOptions)
         }
 
         return done()
     }
 
-    private performDone(receivedMessage: QueueMessage, data: unknown, error: boolean): void {
+    private async validateData(data: QueueMessageData, listener: Listener): Promise<ValidationResult> {
+        const { payload } = data
+        const { validationRules } = listener
+
+        try {
+            this.eventMessageValidator.validateEventMessage(data, validationRules)
+
+            return { isValid: true }
+        } catch (err) {
+            this.logger.error('Failed to validate event message', { err })
+            if (err instanceof ValidationError && 'validationErrorHandler' in listener && payload?.uuid) {
+                const eventBusListener = listener as EventBusListener
+
+                await eventBusListener.validationErrorHandler?.(err, payload.uuid).catch((err_) => err_)
+            }
+
+            return err instanceof ValidationError ? { isValid: false, error: err } : { isValid: false }
+        }
+    }
+
+    private directReplyDone(receivedMessage: QueueMessage, response: unknown, error: boolean): void {
         const {
             done,
-            data: { event, payload },
-            properties: { replyTo, correlationId },
+            data: {
+                event,
+                payload: { uuid },
+            },
         } = receivedMessage
 
-        const useDirectReply = replyTo && correlationId
-        if (!useDirectReply) {
-            done()
+        const data: unknown | ApiError = error ? utils.handleError(response, (err) => err) : response
 
-            return
-        }
-
-        if (error) {
-            return utils.handleError(data, (err) => {
-                done(<QueueMessageData>{
-                    event,
-                    meta: {
-                        date: new Date(),
-                    },
-                    payload: {
-                        uuid: payload.uuid,
-                        error: {
-                            message: err.message,
-                            http_code: err.getCode(),
-                            data: err.getData(),
-                        },
-                    },
-                })
-            })
-        }
-
-        done(<QueueMessageData>{
+        const messageData: QueueMessageData = {
             event,
             meta: {
                 date: new Date(),
             },
             payload: {
-                uuid: payload.uuid,
-                response: data,
+                uuid,
+                ...(data instanceof ApiError ? { error: this.prepareQueueMessageError(data) } : { response: data }),
             },
-        })
+        }
+
+        done(messageData)
     }
 
     private getServiceCode(listener: EventBusListener | TaskListener | undefined, payload: unknown): string | undefined {
@@ -175,6 +173,14 @@ export class EventMessageHandler {
             return listener?.getServiceCode?.(payload)
         } catch (err) {
             this.logger.error('Failed to get event listener service code', { err, listener })
+        }
+    }
+
+    private prepareQueueMessageError(err: ApiError): QueueMessageError {
+        return {
+            data: err.getData(),
+            message: err.message,
+            http_code: err.getCode(),
         }
     }
 }

@@ -2,40 +2,24 @@ import { ValidationSchema } from '@diia-inhouse/validators'
 
 import { TaskListener } from '@interfaces/index'
 
-export type PromiseWithResolver = Promise<void> & { resolve?: () => void }
+export const TestTaskListenerName = 'testTask'
 
-let resolve: () => void = () => null
+export class TestTaskListener implements TaskListener {
+    name: string
 
-export class TestTask implements TaskListener {
-    promiseWithResolver: PromiseWithResolver | undefined
-
-    name = 'testTask'
-
-    isDelayed = true
+    isDelayed: boolean
 
     validationRules: ValidationSchema = {
         text: { type: 'string' },
     }
 
-    async handler(): Promise<void> {
-        this?.promiseWithResolver?.resolve?.()
+    queueNames?: string[]
+
+    constructor(name?: string, isDelayed = true, queueNames: string[] = []) {
+        this.isDelayed = isDelayed
+        this.queueNames = queueNames
+        this.name = name ?? TestTaskListenerName
     }
 
-    getPromiseWithResolver(): PromiseWithResolver {
-        if (this.promiseWithResolver) {
-            return this.promiseWithResolver
-        }
-
-        const promise: PromiseWithResolver = new Promise((_resolve: () => void) => {
-            resolve = _resolve
-        })
-
-        promise.resolve = resolve
-
-        this.promiseWithResolver = promise
-
-        return promise
-    }
+    async handler(): Promise<void> {}
 }
-
-export default TestTask

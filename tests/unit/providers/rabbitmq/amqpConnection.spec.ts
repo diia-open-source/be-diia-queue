@@ -1,17 +1,17 @@
 /* eslint-disable unicorn/prefer-event-target */
-const connectMock = jest.fn()
-
-jest.mock('amqplib', () => ({ connect: connectMock }))
-
 import { EventEmitter } from 'node:events'
 
-import { connectOptions, reconnectOptions, socketOptions } from '../../../mocks/providers/rabbitmq/amqpConnection'
+import * as amqp from 'amqplib'
 
 import { AmqpConnection } from '@src/providers/rabbitmq/amqpConnection'
 
 import { logger } from '@tests/unit/mocks'
 
 import { ConnectionStatus } from '@interfaces/index'
+
+import { connectOptions, reconnectOptions, socketOptions } from '../../../mocks/providers/rabbitmq/amqpConnection'
+
+vi.mock('amqplib', () => ({ connect: vi.fn() }))
 
 class Connection extends EventEmitter {
     async createChannel(): Promise<EventEmitter> {
@@ -26,11 +26,11 @@ class Connection extends EventEmitter {
 describe('AmqpConnection', () => {
     describe('method: `connect`', () => {
         it('should successfully create amqp connection', async () => {
-            const connection = new Connection()
+            const connection = new Connection() as amqp.Connection
             const amqpConnection = new AmqpConnection(connectOptions, logger, reconnectOptions, socketOptions)
 
-            connectMock.mockResolvedValue(connection)
-            jest.spyOn(amqpConnection, 'emit').mockReturnThis()
+            vi.mocked(amqp.connect).mockResolvedValue(connection)
+            vi.spyOn(amqpConnection, 'emit').mockReturnThis()
 
             await amqpConnection.connect()
 
@@ -40,29 +40,32 @@ describe('AmqpConnection', () => {
         })
 
         it('should successfully create connection and then properly handle error event', async () => {
+            // Arrange
             const errorToHandle = new Error('Unable to proceed operation')
-            const connection = new Connection()
+            const connection = new Connection() as amqp.Connection
             const amqpConnection = new AmqpConnection(connectOptions, logger, reconnectOptions, socketOptions)
 
-            connectMock.mockResolvedValue(connection)
-            jest.spyOn(amqpConnection, 'emit').mockReturnThis()
+            vi.mocked(amqp.connect).mockResolvedValue(connection)
+            vi.spyOn(amqpConnection, 'emit').mockReturnThis()
 
+            // Act
             await amqpConnection.connect()
 
             connection.emit('error', errorToHandle)
 
+            // Assert
             expect(amqpConnection.emit).toHaveBeenCalledWith('ready')
             expect(logger.info).toHaveBeenCalledWith('Connection to RabbitMQ is created')
             expect(logger.info).toHaveBeenCalledWith('Connection is ready')
-            expect(logger.error).toHaveBeenCalledWith('Connection error', errorToHandle)
+            expect(logger.error).toHaveBeenCalledWith('Connection error', { err: errorToHandle })
         })
 
         it('should successfully create connection and then properly handle close event when reconnect is disabled', async () => {
-            const connection = new Connection()
+            const connection = new Connection() as amqp.Connection
             const amqpConnection = new AmqpConnection(connectOptions, logger, { reconnectEnabled: false }, socketOptions)
 
-            connectMock.mockResolvedValue(connection)
-            jest.spyOn(amqpConnection, 'emit').mockReturnThis()
+            vi.mocked(amqp.connect).mockResolvedValue(connection)
+            vi.spyOn(amqpConnection, 'emit').mockReturnThis()
 
             await amqpConnection.connect()
 
@@ -79,7 +82,7 @@ describe('AmqpConnection', () => {
         it('should successfully create channel', async () => {
             const amqpConnection = new AmqpConnection(connectOptions, logger, { reconnectEnabled: false }, socketOptions)
 
-            connectMock.mockResolvedValue(new Connection())
+            vi.mocked(amqp.connect).mockResolvedValue(new Connection() as amqp.Connection)
 
             await amqpConnection.connect()
 
@@ -92,7 +95,7 @@ describe('AmqpConnection', () => {
             it('should properly handle close event', async () => {
                 const amqpConnection = new AmqpConnection(connectOptions, logger, { reconnectEnabled: false }, socketOptions)
 
-                connectMock.mockResolvedValue(new Connection())
+                vi.mocked(amqp.connect).mockResolvedValue(new Connection() as amqp.Connection)
 
                 await amqpConnection.connect()
 
@@ -110,7 +113,7 @@ describe('AmqpConnection', () => {
                 const expectedError = new Error('Unable to transmit data')
                 const amqpConnection = new AmqpConnection(connectOptions, logger, { reconnectEnabled: false }, socketOptions)
 
-                connectMock.mockResolvedValue(new Connection())
+                vi.mocked(amqp.connect).mockResolvedValue(new Connection() as amqp.Connection)
 
                 await amqpConnection.connect()
 
@@ -130,11 +133,11 @@ describe('AmqpConnection', () => {
         it('should successfully reconnect', async () => {
             const amqpConnection = new AmqpConnection(connectOptions, logger, reconnectOptions, socketOptions)
 
-            connectMock.mockResolvedValue(new Connection())
+            vi.mocked(amqp.connect).mockResolvedValue(new Connection() as amqp.Connection)
 
             await amqpConnection.connect()
 
-            jest.spyOn(amqpConnection, 'connect').mockResolvedValue()
+            vi.spyOn(amqpConnection, 'connect').mockResolvedValue()
 
             await amqpConnection.reconnect()
 
@@ -148,7 +151,7 @@ describe('AmqpConnection', () => {
         it('should successfully close connection', async () => {
             const amqpConnection = new AmqpConnection(connectOptions, logger, reconnectOptions, socketOptions)
 
-            connectMock.mockResolvedValue(new Connection())
+            vi.mocked(amqp.connect).mockResolvedValue(new Connection() as amqp.Connection)
 
             await amqpConnection.connect()
             await amqpConnection.closeConnection()
@@ -160,7 +163,7 @@ describe('AmqpConnection', () => {
         it('should skip to close connection in case it was not connected previously', async () => {
             const amqpConnection = new AmqpConnection(connectOptions, logger, reconnectOptions, socketOptions)
 
-            connectMock.mockResolvedValue(new Connection())
+            vi.mocked(amqp.connect).mockResolvedValue(new Connection() as amqp.Connection)
 
             await amqpConnection.closeConnection()
 

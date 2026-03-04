@@ -1,40 +1,31 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
 
+import { mock } from 'vitest-mock-extended'
+
 import Logger from '@diia-inhouse/diia-logger'
-import { EnvService } from '@diia-inhouse/env'
-import { CacheService, PubSubService } from '@diia-inhouse/redis'
-import { mockClass } from '@diia-inhouse/test'
 import { AppValidator } from '@diia-inhouse/validators'
 
 import { EventMessageHandler, QueueContext } from '@src/index'
 
 import { EventMessageValidator } from '@services/eventMessageValidator'
-import { ExternalCommunicatorChannel } from '@services/externalCommunicatorChannel'
 
-export const logger = new (mockClass(Logger))()
+export const logger = mock<Logger>()
 
 export const eventListener = {
-    handler: jest.fn(),
+    handler: vi.fn(),
     event: 'acquirersOfferRequestHasDeleted',
     validationRules: undefined,
     isSync: false,
-    validationErrorHandler: jest.fn(),
+    validationErrorHandler: vi.fn(),
 }
 
-export const appValidator = new (mockClass(AppValidator))()
+export const appValidator = mock<AppValidator>({ validate: vi.fn() })
 
-export const eventMessageValidator = new (mockClass(EventMessageValidator))(appValidator)
+export const eventMessageValidator = mock<EventMessageValidator>({
+    validateEventMessage: vi.fn(),
+    validateSyncedEventMessage: vi.fn(),
+})
 
-export const envService = new EnvService(logger)
+export const asyncLocalStorage = mock<AsyncLocalStorage<QueueContext>>({ run: vi.fn() })
 
-export const redisConfig = { readOnly: { port: 6379 }, readWrite: { port: 6379 } }
-
-export const cacheService = new CacheService(redisConfig, envService, logger)
-
-export const channel = new (mockClass(ExternalCommunicatorChannel))(cacheService)
-
-export const pubSubService = new (mockClass(PubSubService))(redisConfig, logger)
-
-export const asyncLocalStorage = new (mockClass(AsyncLocalStorage<QueueContext>))()
-
-export const eventMessageHandler = new EventMessageHandler(eventMessageValidator, channel, pubSubService, asyncLocalStorage, logger)
+export const eventMessageHandler = new EventMessageHandler(eventMessageValidator, asyncLocalStorage, logger)

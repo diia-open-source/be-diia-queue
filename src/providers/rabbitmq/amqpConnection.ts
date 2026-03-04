@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events'
 import * as os from 'node:os'
 
-import { Channel, Connection, Options, connect } from 'amqplib'
+import { Channel, ChannelModel, Options, connect } from 'amqplib'
 
 import { Logger } from '@diia-inhouse/types'
 
@@ -21,7 +21,7 @@ export class AmqpConnection extends EventEmitter {
 
     private reconnectTimeout = defaultReconnectTimeoutMs
 
-    private connection: Connection = null
+    private connection?: ChannelModel
 
     private connectionStatus = ConnectionStatus.Init
 
@@ -50,7 +50,7 @@ export class AmqpConnection extends EventEmitter {
             this.logger.info('Connection is ready')
             this.emit('ready')
 
-            this.connection.on('close', async () => {
+            this.connection?.on('close', async () => {
                 this.connectionStatus = ConnectionStatus.Closed
                 if (this.reconnectEnabled) {
                     await this.reconnect()
@@ -60,8 +60,8 @@ export class AmqpConnection extends EventEmitter {
                 }
             })
 
-            this.connection.on('error', async (err: Error) => {
-                this.logger.error('Connection error', err)
+            this.connection?.on('error', async (err) => {
+                this.logger.error('Connection error', { err })
             })
         } catch (err) {
             this.logger.error('Creating connection to Rabbit MQ error', { err })
@@ -74,31 +74,47 @@ export class AmqpConnection extends EventEmitter {
         }
     }
 
-    /**
-     * Create new channel
-     */
-    async createChannel(queueName: string): Promise<Channel> {
+    async createChannel(queueName?: string): Promise<Channel> {
         this.logger.info('Creating channel to RabbitMQ...', { queueName })
-        const channel: Channel = await this.connection.createChannel()
+        if (!this.connection) {
+            throw new Error('RabbitMQ connection is not initialized')
+        }
 
-        channel.on('close', async () => {
-            this.logger.info('Channel was closed.')
-        })
+        try {
+            const channel: Channel = await this.connection.createChannel()
 
-        channel.on('error', (err) => {
-            this.logger.error('Channel on error', { err })
-        })
+            channel.on('cancel', (consumerTag) => {
+                this.logger.info(`Consumer with tag ${consumerTag} was cancelled.`)
+            })
 
-        this.logger.info('Channel to RabbitMQ is created', { queueName })
+            channel.on('close', async () => {
+                this.logger.info('Channel was closed.')
+            })
 
-        return channel
+            channel.on('error', (err) => {
+                this.logger.error('Channel on error', { err })
+            })
+
+            this.logger.info('Channel to RabbitMQ is created', { queueName })
+
+            return channel
+        } catch (err) {
+            this.logger.error('Creating channel to Rabbit MQ error', { err })
+
+            if (this.reconnectEnabled) {
+                await this.reconnect()
+
+                return await this.createChannel(queueName)
+            }
+
+            throw err
+        }
     }
 
     async reconnect(): Promise<void> {
         this.connectionStatus = ConnectionStatus.Reconnecting
         this.logger.info(`Try to reconnect to Rabbit MQ in ${this.reconnectTimeout} ms`)
         await new Promise((resolve) => {
-            // eslint-disable-next-line @typescript-eslint/no-implied-eval
             setTimeout(resolve, this.reconnectTimeout)
         })
         await this.connect()
@@ -110,7 +126,7 @@ export class AmqpConnection extends EventEmitter {
         }
 
         this.connectionStatus = ConnectionStatus.Closing
-        await this.connection.close()
+        await this.connection?.close()
         this.logger.info('Connection was closed')
     }
 

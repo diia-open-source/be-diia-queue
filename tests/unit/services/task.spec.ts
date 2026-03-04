@@ -1,60 +1,383 @@
-import { mockClass } from '@diia-inhouse/test'
-import { ValidationSchema } from '@diia-inhouse/validators'
+import { describe, expect } from 'vitest'
+import { mock } from 'vitest-mock-extended'
 
-import { asyncLocalStorage, eventMessageHandler, logger } from '../mocks'
-
-import { Task } from '@src/index'
+import constants from '@src/constants'
+import {
+    BaseQueueOptions,
+    ExportConfig,
+    MessageBrokerServiceConfig,
+    QueueMessageData,
+    QueueTypes,
+    Task,
+    emptyMessageBrokerServiceConfig,
+} from '@src/index'
 import { RabbitMQProvider } from '@src/providers/rabbitmq'
+import { getConsumerTag } from '@src/utils'
 
-import { validRabbitMQConfig } from '@tests/mocks/providers/rabbitmq'
+import { getExchangeOptions, getExportConfig, getQueueOptions } from '@mocks/config'
+import { TestTaskListener, TestTaskListenerName } from '@mocks/tasks'
 
-import { QueueConfigType } from '@interfaces/queueConfig'
-
-const messageHandler = async (): Promise<void> => {}
+import { eventMessageHandler, logger } from '../mocks'
 
 describe('Task', () => {
-    const taskListener = {
-        name: 'name',
-        isDelayed: false,
-        validationRules: <ValidationSchema>(<unknown>{}),
-        handler: jest.fn(),
-    }
-    const queueProvider = new (mockClass(RabbitMQProvider))(
-        'Auth',
-        validRabbitMQConfig,
-        {},
-        {},
-        [],
-        [],
-        QueueConfigType.Internal,
-        logger,
-        asyncLocalStorage,
+    const defaultTaskName = 'testTask'
+
+    const defaultHostname = 'hostname'
+    const defaultSystemServiceName = 'TestSystemService'
+    const defaultServiceName = 'TestService'
+
+    const emptyExportConfig = getExportConfig()
+
+    const queueProvider = mock<RabbitMQProvider>()
+
+    const defaultExchangeOptions = getExchangeOptions({ name: 'TestExchange' })
+    const defaultQueueOptions = getQueueOptions(
+        {
+            name: 'TestQueue',
+            bindTo: [
+                {
+                    exchangeName: defaultExchangeOptions.name,
+                    routingKey: constants.DEFAULT_ROUTING_KEY,
+                },
+            ],
+            consumerOptions: {
+                prefetchCount: 4,
+            },
+        },
+        defaultServiceName,
+        defaultHostname,
     )
 
-    describe('method: `subscribe`', () => {
-        it('should successfully subscribe to task', async () => {
-            const taskName = 'taskName'
-            const task = new Task(queueProvider, [taskListener], eventMessageHandler, logger)
+    const defaultMessageBrokerServiceConfig: MessageBrokerServiceConfig = {
+        queuesOptions: [defaultQueueOptions],
+        exchangesOptions: [defaultExchangeOptions],
+    }
 
-            jest.spyOn(queueProvider, 'getServiceName').mockReturnValue('Auth')
-            jest.spyOn(queueProvider, 'subscribeTask').mockResolvedValue(true)
+    describe('method: `onInit`', () => {
+        it('should produce no listeners and no subscriptions when consumerEnabled is false', async () => {
+            // Arrange
+            const exportConfigWithConsumerDisabled = getExportConfig({
+                rabbit: { consumerEnabled: false },
+            })
 
-            expect(await task.subscribe(taskName, messageHandler, {})).toBeTruthy()
-            expect(queueProvider.subscribeTask).toHaveBeenCalledWith('TasksQueueAuth[taskName]', messageHandler, {})
+            const spiedInit = queueProvider.init.mockResolvedValue()
+            const spiedSubscribe = queueProvider.subscribe.mockResolvedValue(true)
+
+            queueProvider.getConfig.mockReturnValue(exportConfigWithConsumerDisabled)
+            queueProvider.getMessageBrokerServiceConfig.mockReturnValue(emptyMessageBrokerServiceConfig)
+
+            const taskListener = new TestTaskListener()
+            const task = new Task(
+                defaultServiceName,
+                defaultSystemServiceName,
+                queueProvider,
+                [taskListener],
+                eventMessageHandler,
+                logger,
+                defaultHostname,
+            )
+
+            // Act
+            await task.onInit()
+
+            // Assert
+            expect(spiedInit).toHaveBeenCalledExactlyOnceWith(
+                expect.objectContaining({
+                    queuesOptions: [],
+                }),
+            )
+            expect(spiedSubscribe).not.toHaveBeenCalled()
+        })
+
+        describe('global config', async () => {
+            it('should successfully initialize', async () => {
+                // Arrange
+                const spiedInit = queueProvider.init.mockResolvedValue()
+                const spiedSubscribe = queueProvider.subscribe.mockResolvedValue(true)
+
+                queueProvider.getConfig.mockReturnValue(emptyExportConfig)
+                queueProvider.getMessageBrokerServiceConfig.mockReturnValue(emptyMessageBrokerServiceConfig)
+
+                const taskListener = new TestTaskListener()
+                const task = new Task(
+                    defaultServiceName,
+                    defaultSystemServiceName,
+                    queueProvider,
+                    [taskListener],
+                    eventMessageHandler,
+                    logger,
+                    defaultHostname,
+                )
+
+                // Act
+                await task.onInit()
+
+                // Assert
+                const expectedTaskName = `TasksQueue${defaultServiceName}[${taskListener.name}]`
+
+                expect(spiedInit).toHaveBeenCalledExactlyOnceWith({
+                    queuesOptions: [
+                        {
+                            type: QueueTypes.Quorum,
+                            name: expectedTaskName,
+                            declare: emptyExportConfig.rabbit.declareOptions.assertQueues,
+                            bindTo: [
+                                {
+                                    exchangeName: expectedTaskName,
+                                    routingKey: constants.DEFAULT_ROUTING_KEY,
+                                    bind: emptyExportConfig.rabbit.declareOptions.assertQueues,
+                                },
+                            ],
+                            consumerOptions: {
+                                consumerTag: getConsumerTag(defaultSystemServiceName, defaultHostname),
+                                prefetchCount: emptyExportConfig.rabbit.listenerOptions.prefetchCount,
+                            },
+                        },
+                    ],
+                    exchangesOptions: [
+                        {
+                            delayed: true,
+                            name: expectedTaskName,
+                            declare: emptyExportConfig.rabbit.declareOptions.assertExchanges,
+                        },
+                    ],
+                })
+
+                expect(spiedSubscribe).toHaveBeenCalledExactlyOnceWith('TasksQueueTestService[testTask]', expect.any(Function))
+
+                expect(logger.error).not.toHaveBeenCalledWith(
+                    'Not found exchange options by name (TasksQueueTestService[testTask]) for task service',
+                )
+            })
+            it('should successfully initialize with overridden queue options', async () => {
+                // Arrange
+                const spiedInit = queueProvider.init.mockResolvedValue()
+
+                const overriddenQueuesOptions: BaseQueueOptions = {
+                    type: QueueTypes.Quorum,
+                    options: {
+                        durable: true,
+                    },
+                }
+
+                const exportConfig: ExportConfig = getExportConfig({
+                    rabbit: {
+                        declareOptions: {
+                            queuesOptions: overriddenQueuesOptions,
+                        },
+                    },
+                })
+
+                queueProvider.getConfig.mockReturnValue(exportConfig)
+                queueProvider.getMessageBrokerServiceConfig.mockReturnValue(emptyMessageBrokerServiceConfig)
+
+                const taskListener = new TestTaskListener()
+                const task = new Task(
+                    defaultServiceName,
+                    defaultSystemServiceName,
+                    queueProvider,
+                    [taskListener],
+                    eventMessageHandler,
+                    logger,
+                    defaultHostname,
+                )
+
+                // Act
+                await task.onInit()
+
+                // Assert
+                const expectedTaskName = `TasksQueue${defaultServiceName}[${taskListener.name}]`
+
+                expect(spiedInit).toHaveBeenCalledExactlyOnceWith({
+                    queuesOptions: [
+                        {
+                            name: expectedTaskName,
+                            declare: exportConfig.rabbit.declareOptions.assertQueues,
+                            bindTo: [
+                                {
+                                    exchangeName: expectedTaskName,
+                                    routingKey: constants.DEFAULT_ROUTING_KEY,
+                                    bind: emptyExportConfig.rabbit.declareOptions.assertQueues,
+                                },
+                            ],
+                            consumerOptions: {
+                                consumerTag: getConsumerTag(defaultSystemServiceName, defaultHostname),
+                                prefetchCount: emptyExportConfig.rabbit.listenerOptions.prefetchCount,
+                            },
+                            ...overriddenQueuesOptions,
+                        },
+                    ],
+                    exchangesOptions: [
+                        {
+                            delayed: true,
+                            name: expectedTaskName,
+                            declare: emptyExportConfig.rabbit.declareOptions.assertExchanges,
+                        },
+                    ],
+                })
+            })
+        })
+
+        describe('relative config', async () => {
+            it('should successfully initialize', async () => {
+                // Arrange
+                const spiedInit = queueProvider.init.mockResolvedValue()
+                const spiedSubscribe = queueProvider.subscribe.mockResolvedValue(true)
+
+                queueProvider.getConfig.mockReturnValue(emptyExportConfig)
+
+                queueProvider.getMessageBrokerServiceConfig.mockReturnValue(defaultMessageBrokerServiceConfig)
+
+                const taskListener = new TestTaskListener(defaultTaskName, true, [defaultQueueOptions.name])
+                const task = new Task(
+                    defaultServiceName,
+                    defaultSystemServiceName,
+                    queueProvider,
+                    [taskListener],
+                    eventMessageHandler,
+                    logger,
+                    defaultHostname,
+                )
+
+                // Act
+                await task.onInit()
+
+                // Assert
+                expect(spiedInit).toHaveBeenCalledExactlyOnceWith(defaultMessageBrokerServiceConfig)
+
+                expect(spiedSubscribe).toHaveBeenCalledExactlyOnceWith(defaultQueueOptions.name, expect.any(Function))
+            })
+        })
+
+        describe('mix config', async () => {
+            it('should successfully initialize', async () => {
+                // Arrange
+                const spiedInit = queueProvider.init.mockResolvedValue()
+                const spiedSubscribe = queueProvider.subscribe.mockResolvedValue(true)
+
+                queueProvider.getConfig.mockReturnValue(emptyExportConfig)
+
+                queueProvider.getMessageBrokerServiceConfig.mockReturnValue(defaultMessageBrokerServiceConfig)
+
+                const taskListener = new TestTaskListener(defaultTaskName, true, [defaultQueueOptions.name])
+                const task = new Task(
+                    defaultServiceName,
+                    defaultSystemServiceName,
+                    queueProvider,
+                    [taskListener],
+                    eventMessageHandler,
+                    logger,
+                    defaultHostname,
+                )
+
+                // Act
+                await task.onInit()
+
+                // Assert
+                expect(spiedInit).toHaveBeenCalledExactlyOnceWith({
+                    queuesOptions: [defaultQueueOptions],
+                    exchangesOptions: [defaultExchangeOptions],
+                })
+
+                expect(spiedSubscribe).toHaveBeenCalledExactlyOnceWith(defaultQueueOptions.name, expect.any(Function))
+            })
         })
     })
-
     describe('method: `publish`', () => {
-        it('should successfully publish message for task', async () => {
-            const taskName = 'taskName'
-            const message = { key: 'value' }
-            const task = new Task(queueProvider, [taskListener], eventMessageHandler, logger)
+        describe('global config', async () => {
+            it('should successfully publish message', async () => {
+                // Arrange
+                queueProvider.getConfig.mockReturnValue(emptyExportConfig)
+                queueProvider.getMessageBrokerServiceConfig.mockReturnValue(emptyMessageBrokerServiceConfig)
 
-            jest.spyOn(queueProvider, 'getServiceName').mockReturnValue('Auth')
-            jest.spyOn(queueProvider, 'publishTask').mockResolvedValue(true)
+                const spiedPublish = queueProvider.publish.mockResolvedValue()
 
-            expect(await task.publish(taskName, message, 1800)).toBeTruthy()
-            expect(queueProvider.publishTask).toHaveBeenCalledWith('TasksQueueAuth[taskName]', message, 1800)
+                const taskListener = new TestTaskListener()
+                const task = new Task(
+                    defaultServiceName,
+                    defaultSystemServiceName,
+                    queueProvider,
+                    [taskListener],
+                    eventMessageHandler,
+                    logger,
+                    defaultHostname,
+                )
+
+                // Act
+                await task.onInit()
+
+                const payload = { text: '+++' }
+
+                const delay = 100
+
+                await task.publish(taskListener.name, payload, delay)
+
+                // Assert
+                const expectedMsg: QueueMessageData = {
+                    payload,
+                    event: 'TasksQueueTestService[testTask]',
+                    meta: {
+                        date: expect.any(Date),
+                    },
+                }
+
+                const expectedExchangeName = `TasksQueue${defaultServiceName}[${taskListener.name}]`
+
+                expect(spiedPublish).toHaveBeenCalledExactlyOnceWith(expectedMsg, expectedExchangeName, constants.DEFAULT_ROUTING_KEY, {
+                    delay,
+                })
+            })
+        })
+
+        describe('relative config', async () => {
+            it('should successfully publish message', async () => {
+                // Arrange
+                queueProvider.getConfig.mockReturnValue(emptyExportConfig)
+                queueProvider.getMessageBrokerServiceConfig.mockReturnValue({
+                    queuesOptions: [defaultQueueOptions],
+                    exchangesOptions: [{ ...defaultExchangeOptions, delayed: true }],
+                })
+
+                const spiedPublish = queueProvider.publish.mockResolvedValue()
+
+                const taskListener = new TestTaskListener(defaultTaskName, true, [defaultQueueOptions.name])
+                const task = new Task(
+                    defaultServiceName,
+                    defaultSystemServiceName,
+                    queueProvider,
+                    [taskListener],
+                    eventMessageHandler,
+                    logger,
+                    defaultHostname,
+                )
+
+                // Act
+                await task.onInit()
+
+                const payload = { text: '+++' }
+
+                const delay = 100
+
+                await task.publish(TestTaskListenerName, payload, delay)
+
+                // Assert
+                const expectedMsg: QueueMessageData = {
+                    payload,
+                    event: 'TasksQueueTestService[testTask]',
+                    meta: {
+                        date: expect.any(Date),
+                    },
+                }
+
+                expect(spiedPublish).toHaveBeenCalledExactlyOnceWith(
+                    expectedMsg,
+                    defaultExchangeOptions.name,
+                    constants.DEFAULT_ROUTING_KEY,
+                    {
+                        delay,
+                    },
+                )
+            })
         })
     })
 })

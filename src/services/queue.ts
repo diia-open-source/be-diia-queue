@@ -1,94 +1,162 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
 
-import { HealthCheckResult, HttpStatusCode, Logger, OnHealthCheck } from '@diia-inhouse/types'
+import Logger from '@diia-inhouse/diia-logger'
+import { MetricsService } from '@diia-inhouse/diia-metrics'
+import { HealthCheckResult, HttpStatusCode, OnHealthCheck } from '@diia-inhouse/types'
 
-import { ConnectionStatus, QueueConnectionConfig, QueueContext } from '../interfaces'
-import { QueueConfigType } from '../interfaces/queueConfig'
+import {
+    ConnectionStatus,
+    MessageBrokerExternalServiceType,
+    MessageBrokerInternalServiceType,
+    MessageBrokerServiceConfig,
+    MessageBrokerServiceType,
+    MessageBrokerServicesConfig,
+    MessageBrokerServicesStatus,
+    QueueConfigType,
+    QueueConnectionConfig,
+    QueueConnectionType,
+    QueueContext,
+    emptyMessageBrokerServiceConfig,
+} from '../interfaces'
 import { QueueStatus } from '../interfaces/queueStatus'
 import { RabbitMQProvider } from '../providers/rabbitmq'
 
 export class Queue implements OnHealthCheck {
-    private internalQueue: RabbitMQProvider
-
-    private externalQueue: RabbitMQProvider
+    private readonly internalRabbitMQProvidersMap: Map<MessageBrokerInternalServiceType, RabbitMQProvider> = new Map()
+    private readonly externalRabbitMQProvidersMap: Map<MessageBrokerExternalServiceType, RabbitMQProvider> = new Map()
 
     constructor(
-        private readonly serviceName: string,
+        private readonly systemServiceName: string,
+        private readonly metrics: MetricsService,
         private readonly connectionConfig: QueueConnectionConfig,
-
         private readonly asyncLocalStorage: AsyncLocalStorage<QueueContext>,
         private readonly logger: Logger,
     ) {}
 
     async onHealthCheck(): Promise<HealthCheckResult<QueueStatus>> {
-        const internalQueueStatus = this.internalQueue?.getStatus()
-        const externalQueueStatus = this.externalQueue?.getStatus()
-
-        const queueStatuses = [internalQueueStatus, externalQueueStatus].filter(Boolean).flatMap((status) => Object.values(status))
-
-        const status: HttpStatusCode = queueStatuses.some((s) => s !== ConnectionStatus.Connected)
-            ? HttpStatusCode.SERVICE_UNAVAILABLE
-            : HttpStatusCode.OK
+        const status = this.getProvidersStatus()
 
         return {
             status,
             details: {
                 rabbit: {
-                    internal: internalQueueStatus,
-                    external: externalQueueStatus,
+                    internal: this.getProvidersStatusDetails(this.internalRabbitMQProvidersMap),
+                    external: this.getProvidersStatusDetails(this.externalRabbitMQProvidersMap),
                 },
             },
         }
     }
 
-    getInternalQueue(): RabbitMQProvider {
-        if (this.internalQueue) {
-            return this.internalQueue
+    makeInternalRabbitMQProvider(serviceType: MessageBrokerInternalServiceType): RabbitMQProvider {
+        const provider = this.internalRabbitMQProvidersMap.get(serviceType)
+        if (provider) {
+            return provider
         }
 
         const {
-            internal,
-            serviceRulesConfig: { queuesConfig, servicesConfig, topicsConfig, internalEvents },
+            internal: rabbitMQConfig,
+            serviceRulesConfig: { queuesConfig, servicesConfig = {}, topicsConfig, messageBrokerServices },
         } = this.connectionConfig
 
-        this.internalQueue = new RabbitMQProvider(
-            this.serviceName,
-            internal,
-            servicesConfig[QueueConfigType.Internal],
-            topicsConfig[QueueConfigType.Internal],
+        if (!rabbitMQConfig) {
+            throw new Error(`External rabbitMQ config is not provided`)
+        }
+
+        const messageBrokerServiceConfig = this.getMessageBrokerServiceConfig(serviceType, messageBrokerServices)
+
+        const serviceConfig = servicesConfig[QueueConnectionType.Internal] || {}
+
+        const rabbitMQProvider = new RabbitMQProvider(
+            this.systemServiceName,
+            rabbitMQConfig,
+            serviceConfig,
+            topicsConfig[QueueConnectionType.Internal],
             [],
-            internalEvents,
-            QueueConfigType.Internal,
             this.logger,
+            this.metrics,
             this.asyncLocalStorage,
             queuesConfig[QueueConfigType.Internal],
+            messageBrokerServiceConfig,
         )
 
-        return this.internalQueue
+        this.internalRabbitMQProvidersMap.set(serviceType, rabbitMQProvider)
+
+        return rabbitMQProvider
     }
 
-    getExternalQueue(): RabbitMQProvider {
-        if (this.externalQueue) {
-            return this.externalQueue
+    makeExternalRabbitMQProvider(serviceType: MessageBrokerExternalServiceType): RabbitMQProvider {
+        const provider = this.externalRabbitMQProvidersMap.get(serviceType)
+        if (provider) {
+            return provider
         }
 
         const {
-            external,
-            serviceRulesConfig: { portalEvents, servicesConfig, topicsConfig, internalEvents },
+            external: rabbitMQConfig,
+            serviceRulesConfig: { servicesConfig = {}, topicsConfig, portalEvents = [], messageBrokerServices },
         } = this.connectionConfig
 
-        this.externalQueue = new RabbitMQProvider(
-            this.serviceName,
-            external,
-            servicesConfig[QueueConfigType.External],
-            topicsConfig[QueueConfigType.External],
+        if (!rabbitMQConfig) {
+            throw new Error(`External rabbitMQ config is not provided`)
+        }
+
+        const messageBrokerServiceConfig = this.getMessageBrokerServiceConfig(serviceType, messageBrokerServices)
+
+        const serviceConfig = servicesConfig[QueueConnectionType.External] || {}
+
+        const rabbitMQProvider = new RabbitMQProvider(
+            this.systemServiceName,
+            rabbitMQConfig,
+            serviceConfig,
+            topicsConfig[QueueConnectionType.External],
             portalEvents,
-            internalEvents,
-            QueueConfigType.External,
             this.logger,
+            this.metrics,
             this.asyncLocalStorage,
+            {},
+            messageBrokerServiceConfig,
         )
 
-        return this.externalQueue
+        this.externalRabbitMQProvidersMap.set(serviceType, rabbitMQProvider)
+
+        return rabbitMQProvider
+    }
+
+    private getProvidersStatus(): HttpStatusCode {
+        for (const provider of this.internalRabbitMQProvidersMap.values()) {
+            const { listener: listenerStatus, publisher: publisherStatus } = provider.getStatus()
+
+            if (publisherStatus !== ConnectionStatus.Connected) {
+                return HttpStatusCode.SERVICE_UNAVAILABLE
+            }
+
+            if (listenerStatus !== undefined && listenerStatus !== ConnectionStatus.Connected) {
+                return HttpStatusCode.SERVICE_UNAVAILABLE
+            }
+        }
+
+        return HttpStatusCode.OK
+    }
+
+    private getProvidersStatusDetails(providersMap: Map<MessageBrokerServiceType, RabbitMQProvider>): MessageBrokerServicesStatus {
+        const details: MessageBrokerServicesStatus = {}
+
+        for (const [serviceType, provider] of providersMap) {
+            details[serviceType] = provider.getStatus()
+        }
+
+        return details
+    }
+
+    private getMessageBrokerServiceConfig(
+        serviceType: MessageBrokerServiceType,
+        messageBrokerServices: MessageBrokerServicesConfig | undefined,
+    ): MessageBrokerServiceConfig | undefined {
+        const serviceConfig = messageBrokerServices?.[serviceType] || emptyMessageBrokerServiceConfig
+        const generalConfig = messageBrokerServices?.['general'] || emptyMessageBrokerServiceConfig
+
+        return {
+            queuesOptions: [...serviceConfig.queuesOptions, ...generalConfig.queuesOptions],
+            exchangesOptions: [...serviceConfig.exchangesOptions, ...generalConfig.exchangesOptions],
+        }
     }
 }

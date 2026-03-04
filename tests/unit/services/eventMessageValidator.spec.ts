@@ -1,6 +1,6 @@
-import { appValidator } from '../mocks'
-
 import { EventMessageValidator, QueueMessageData } from '@src/index'
+
+import { appValidator } from '../mocks'
 
 describe('EventMessageValidator', () => {
     describe('method: `validateEventMessage`', () => {
@@ -18,7 +18,7 @@ describe('EventMessageValidator', () => {
                 },
             }
 
-            const spy = jest.spyOn(appValidator, 'validate')
+            const spy = vi.spyOn(appValidator, 'validate')
 
             eventMessageValidator.validateEventMessage(message, {})
 
@@ -50,7 +50,7 @@ describe('EventMessageValidator', () => {
                 },
             }
 
-            const spy = jest.spyOn(appValidator, 'validate')
+            const spy = vi.spyOn(appValidator, 'validate')
 
             eventMessageValidator.validateSyncedEventMessage(message, {})
 
