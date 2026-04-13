@@ -1,6 +1,6 @@
 {
     "name": "@diia-inhouse/diia-queue",
-    "version": "13.2.5",
+    "version": "13.2.6",
     "description": "Package provide queue functionality",
     "main": "dist/index.js",
     "types": "dist/types/index.d.ts",
@@ -44,8 +44,8 @@
     },
     "devDependencies": {
         "@diia-inhouse/configs": "6.1.1",
-        "@diia-inhouse/diia-logger": "3.19.4",
-        "@diia-inhouse/diia-metrics": "6.5.13",
+        "@diia-inhouse/diia-logger": "3.19.5",
+        "@diia-inhouse/diia-metrics": "6.5.14",
         "@diia-inhouse/errors": "1.18.12",
         "@diia-inhouse/eslint-config": "8.8.0",
         "@diia-inhouse/eslint-plugin": "1.9.5",
