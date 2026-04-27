@@ -259,7 +259,8 @@ export class AmqpPublisher {
 
             this.eventEmitter?.once<DirectResponse>(correlationId, (args: DirectResponse<T>) => {
                 clearTimeout(timeout)
-                this.logger.io('Direct event response message', args.body)
+                this.logger.info(`Received direct event response: ${event}`, { traceId: headers.traceId })
+                this.logger.io(`Direct event response message`, { body: args.body, traceId: headers.traceId })
 
                 return resolve(args)
             })
