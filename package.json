@@ -1,6 +1,6 @@
 {
     "name": "@diia-inhouse/diia-queue",
-    "version": "13.3.0",
+    "version": "13.3.1",
     "description": "Package provide queue functionality",
     "main": "dist/index.js",
     "types": "dist/types/index.d.ts",
