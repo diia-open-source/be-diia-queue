@@ -17,7 +17,6 @@ export interface PublishDirectOptions {
     exchangeName?: string
     timeout?: number
     ignoreCache?: boolean
-    retry?: boolean
     registryApiVersion?: string
 }
 
