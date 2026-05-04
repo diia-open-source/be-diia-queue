@@ -1,6 +1,6 @@
 {
     "name": "@diia-inhouse/diia-queue",
-    "version": "13.3.3",
+    "version": "13.3.4",
     "description": "Package provide queue functionality",
     "main": "dist/index.js",
     "types": "dist/types/index.d.ts",
@@ -50,7 +50,7 @@
         "@diia-inhouse/eslint-config": "8.8.2",
         "@diia-inhouse/eslint-plugin": "1.9.6",
         "@diia-inhouse/test": "7.3.23",
-        "@diia-inhouse/types": "12.0.4",
+        "@diia-inhouse/types": "12.0.5",
         "@diia-inhouse/utils": "5.3.28",
         "@diia-inhouse/validators": "1.28.34",
         "@opentelemetry/api": "1.9.0",
