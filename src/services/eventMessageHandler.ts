@@ -1,5 +1,5 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
-import { randomUUID } from 'node:crypto'
+import { randomBytes } from 'node:crypto'
 
 import { isValidTraceId, trace } from '@opentelemetry/api'
 
@@ -65,12 +65,9 @@ export class EventMessageHandler {
     }
 
     private prepareAsyncContext(properties: MessageProperties, serviceCode?: string): AlsData {
-        const activeSpanTraceId = trace.getActiveSpan()?.spanContext().traceId ?? ''
-        const traceId = isValidTraceId(activeSpanTraceId) ? activeSpanTraceId : properties.headers?.traceId || randomUUID()
-
         return {
             logData: {
-                traceId,
+                traceId: this.resolveTraceId(properties),
                 serviceCode,
             },
         }
@@ -181,5 +178,36 @@ export class EventMessageHandler {
             message: err.message,
             http_code: err.getCode(),
         }
+    }
+
+    // Prefer the W3C traceparent on the message — trace.getActiveSpan() misses it
+    // when the inbound span isn't active in this handler's scope.
+    private resolveTraceId(properties: MessageProperties): string {
+        const extractedTraceId = this.extractTraceparentTraceId(properties.headers?.traceparent)
+        if (isValidTraceId(extractedTraceId)) {
+            return extractedTraceId
+        }
+
+        const activeSpanTraceId = trace.getActiveSpan()?.spanContext().traceId ?? ''
+        if (isValidTraceId(activeSpanTraceId)) {
+            return activeSpanTraceId
+        }
+
+        return properties.headers?.traceId || randomBytes(16).toString('hex')
+    }
+
+    // Parses W3C Trace Context "traceparent" directly (format: "<version>-<trace_id>-<span_id>-<flags>").
+    private extractTraceparentTraceId(raw: string | Buffer | undefined | null): string {
+        if (raw === undefined || raw === null) {
+            return ''
+        }
+
+        const tp = Buffer.isBuffer(raw) ? raw.toString('utf8') : raw
+        const [version, traceId] = tp.split('-')
+        if (version !== '00' || !traceId) {
+            return ''
+        }
+
+        return isValidTraceId(traceId) ? traceId : ''
     }
 }
