@@ -43,6 +43,11 @@ export type QueueConfigByQueueName = {
 export type QueueConfig = Record<QueueConfigType.Internal, QueueConfigByQueueName>
 
 export type TopicConfigByConfigType = {
+    /**
+     * Under QueueConfigType.External, each key is auto-prefixed
+     * with 'TopicExternal' to form the broker exchange name (e.g.
+     * 'Auth' → 'TopicExternalAuth'). See ExternalEventBus.
+     */
     [k in ExchangeName]: {
         events: EventName[]
     }
