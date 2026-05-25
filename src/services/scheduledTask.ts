@@ -8,13 +8,13 @@ import {
     MessageBrokerServiceEventsListener,
     PublishingResult,
     ScheduledTasksQueue,
-} from '../interfaces'
-import { ExchangeOptions } from '../interfaces/messageBrokerServiceConfig'
-import { QueueName } from '../interfaces/queueConfig'
-import { RabbitMQProvider } from '../providers/rabbitmq'
-import Communicator from './communicator'
-import { EventCommunicator } from './eventCommunicator'
-import { EventMessageHandler } from './eventMessageHandler'
+} from '../interfaces/index.js'
+import { ExchangeOptions } from '../interfaces/messageBrokerServiceConfig.js'
+import { QueueName } from '../interfaces/queueConfig/index.js'
+import { RabbitMQProvider } from '../providers/rabbitmq/index.js'
+import Communicator from './communicator.js'
+import { EventCommunicator } from './eventCommunicator.js'
+import { EventMessageHandler } from './eventMessageHandler.js'
 
 /**
  * @deprecated use pkg-workflow entities instead
@@ -32,7 +32,7 @@ export class ScheduledTask extends Communicator implements ScheduledTasksQueue, 
         eventMessageHandler: EventMessageHandler,
         logger: Logger,
         hostName: string,
-        private readonly queueName?: QueueName,
+        private readonly queueName: QueueName | undefined = undefined,
     ) {
         super(logger, queueProvider, hostName, systemServiceName)
 

@@ -1,20 +1,22 @@
 {
     "extends": "../tsconfig.json",
     "compilerOptions": {
-        "baseUrl": "../",
         "paths": {
-            "@services/*": ["src/services/*"],
-            "@interfaces/*": ["src/interfaces/*"],
-            "@src/*": ["src/*"],
-            "@mocks/*": ["tests/mocks/*"],
-            "@tests/*": ["tests/*"]
+            "@services/*": ["../src/services/*"],
+            "@interfaces/*": ["../src/interfaces/*"],
+            "@src/*": ["../src/*"],
+            "@mocks/*": ["./mocks/*"],
+            "@tests/*": ["./*"]
         },
         "types": ["vitest/globals"],
         "module": "ESNext",
         "moduleResolution": "Bundler",
+        "isolatedDeclarations": false,
         "isolatedModules": true,
         "noEmit": true,
-        "strict": false
+        "strict": false,
+        "strictNullChecks": true,
+        "rootDir": "../"
     },
     "include": ["./**/*", "../vitest.config.mts"]
 }

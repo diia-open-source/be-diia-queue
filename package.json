@@ -1,25 +1,33 @@
 {
     "name": "@diia-inhouse/diia-queue",
-    "version": "13.3.4",
+    "version": "14.0.10",
+    "type": "module",
     "description": "Package provide queue functionality",
     "main": "dist/index.js",
-    "types": "dist/types/index.d.ts",
+    "types": "dist/index.d.ts",
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "default": "./dist/index.js"
+        },
+        "./package.json": "./package.json"
+    },
     "repository": "https://github.com/diia-open-source/be-diia-queue",
     "author": "Diia",
     "license": "SEE LICENSE IN LICENSE.md",
     "engines": {
-        "node": ">=22"
+        "node": ">=24"
     },
     "files": [
         "dist"
     ],
     "scripts": {
-        "build": "rimraf dist/ && tsc",
-        "build-watch": "tsc --watch",
-        "lint": "eslint . && prettier --check .",
-        "lint-fix": "eslint . --fix && prettier --write .",
+        "build": "rimraf dist/ && tsdown",
+        "build-watch": "tsdown --watch",
+        "lint": "oxlint && oxfmt --check .",
+        "lint-fix": "oxlint --fix && oxfmt .",
         "lint:lockfile": "lockfile-lint --path package-lock.json --allowed-hosts registry.npmjs.org --validate-https",
-        "format": "prettier --write \"src/**/*.ts\"",
+        "format": "oxfmt \"src/**/*.ts\"",
         "prepare": "npm run build",
         "semantic-release": "semantic-release",
         "test": "vitest run",
@@ -33,39 +41,42 @@
         "p-timeout": "4.1.0"
     },
     "peerDependencies": {
-        "@diia-inhouse/diia-logger": ">=3.1.0",
-        "@diia-inhouse/diia-metrics": ">=5.0.0",
-        "@diia-inhouse/env": ">=2.0.0",
-        "@diia-inhouse/errors": ">=1.4.0",
-        "@diia-inhouse/types": ">=6.30.0",
-        "@diia-inhouse/utils": ">=2.21.0",
-        "@diia-inhouse/validators": ">=1.5.0",
+        "@diia-inhouse/diia-logger": ">=4.0.0",
+        "@diia-inhouse/diia-metrics": ">=7.0.0",
+        "@diia-inhouse/env": ">=3.0.0",
+        "@diia-inhouse/errors": ">=2.0.0",
+        "@diia-inhouse/types": ">=13.1.0",
+        "@diia-inhouse/utils": ">=6.0.0",
+        "@diia-inhouse/validators": ">=2.0.0",
         "@opentelemetry/api": ">=1.7.0"
     },
     "devDependencies": {
-        "@diia-inhouse/configs": "6.1.1",
-        "@diia-inhouse/diia-logger": "3.20.12",
-        "@diia-inhouse/diia-metrics": "6.5.38",
-        "@diia-inhouse/errors": "1.18.23",
-        "@diia-inhouse/eslint-config": "8.8.2",
-        "@diia-inhouse/eslint-plugin": "1.9.6",
-        "@diia-inhouse/test": "7.3.23",
-        "@diia-inhouse/types": "12.0.5",
-        "@diia-inhouse/utils": "5.3.28",
-        "@diia-inhouse/validators": "1.28.34",
+        "@diia-inhouse/configs": "7.0.0",
+        "@diia-inhouse/diia-logger": "4.2.4",
+        "@diia-inhouse/diia-metrics": "7.1.5",
+        "@diia-inhouse/env": "3.3.1",
+        "@diia-inhouse/errors": "2.1.1",
+        "@diia-inhouse/oxc-config": "1.10.0",
+        "@diia-inhouse/test": "8.2.1",
+        "@diia-inhouse/types": "13.2.0",
+        "@diia-inhouse/utils": "6.0.11",
+        "@diia-inhouse/validators": "2.2.2",
         "@opentelemetry/api": "1.9.0",
         "@types/lodash": "4.17.24",
-        "@types/node": "24.11.0",
-        "@vitest/coverage-v8": "4.0.18",
-        "@vitest/ui": "4.0.18",
-        "lockfile-lint": "4.14.1",
+        "@types/node": "25.6.2",
+        "@vitest/coverage-v8": "4.1.5",
+        "@vitest/ui": "4.1.5",
+        "lockfile-lint": "5.0.0",
         "madge": "8.0.0",
-        "prettier": "3.8.1",
+        "oxfmt": "0.48.0",
+        "oxlint": "1.63.0",
+        "oxlint-tsgolint": "0.22.1",
         "rimraf": "6.1.3",
-        "type-fest": "4.41.0",
+        "tsdown": "0.22.0",
+        "type-fest": "5.6.0",
         "vite-tsconfig-paths": "6.1.1",
-        "vitest": "4.0.18",
-        "vitest-mock-extended": "3.1.0"
+        "vitest": "4.1.5",
+        "vitest-mock-extended": "4.0.0"
     },
     "release": {
         "extends": "@diia-inhouse/configs/dist/semantic-release/package"
@@ -73,23 +84,6 @@
     "commitlint": {
         "extends": "@diia-inhouse/configs/dist/commitlint"
     },
-    "eslintConfig": {
-        "extends": "@diia-inhouse/eslint-config",
-        "overrides": [
-            {
-                "files": [
-                    "*.ts"
-                ],
-                "parserOptions": {
-                    "project": [
-                        "./tsconfig.json",
-                        "./tests/tsconfig.json"
-                    ]
-                }
-            }
-        ]
-    },
-    "prettier": "@diia-inhouse/eslint-config/prettier",
     "madge": {
         "tsConfig": "./tsconfig.json"
     }

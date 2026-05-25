@@ -1,27 +1,25 @@
 import { randomUUID } from 'node:crypto'
 import { EventEmitter } from 'node:events'
 
-import { Channel, Options } from 'amqplib'
-import { ConsumeMessage } from 'amqplib/properties'
+import { Channel, ConsumeMessage, Options } from 'amqplib'
 
 import { ErrorType, ExternalCommunicatorError, InternalServerError } from '@diia-inhouse/errors'
 import { HttpStatusCode, Logger } from '@diia-inhouse/types'
 
-import constants from '../../constants'
-import { ExchangeName } from '../../interfaces/messageBrokerServiceConfig'
-import { LabelUnknown } from '../../interfaces/metrics'
-import { PublisherOptions } from '../../interfaces/options'
-import { Headers, QueueMessageData } from '../../interfaces/providers/rabbitmq'
-import { ConnectionStatus } from '../../interfaces/providers/rabbitmq/amqpConnection'
-import { DirectResponse, MessageHeaders, PublishingResult } from '../../interfaces/providers/rabbitmq/amqpPublisher'
-import RabbitMQMetricsService from '../../services/metrics'
-import { AmqpConnection } from './amqpConnection'
+import constants from '../../constants.js'
+import { ExchangeName } from '../../interfaces/messageBrokerServiceConfig.js'
+import { LabelUnknown } from '../../interfaces/metrics/index.js'
+import { PublisherOptions } from '../../interfaces/options.js'
+import { ConnectionStatus } from '../../interfaces/providers/rabbitmq/amqpConnection.js'
+import { DirectResponse, MessageHeaders, PublishingResult } from '../../interfaces/providers/rabbitmq/amqpPublisher.js'
+import { Headers, QueueMessageData } from '../../interfaces/providers/rabbitmq/index.js'
+import RabbitMQMetricsService from '../../services/metrics.js'
+import { AmqpConnection } from './amqpConnection.js'
 
 const { APP_ID, DEFAULT_ROUTING_KEY, REPLY_TO_QUEUE_NAME } = constants
 
 export class AmqpPublisher {
     private readonly defaultPublishOptions: Options.Publish = {
-        // eslint-disable-next-line unicorn/text-encoding-identifier-case
         contentEncoding: 'utf-8',
         contentType: 'application/json',
         // if true, the message will be returned if it is not routed to a queue
@@ -71,7 +69,7 @@ export class AmqpPublisher {
         exchangeName: ExchangeName,
         message: QueueMessageData,
         headers: MessageHeaders,
-        routingKey = DEFAULT_ROUTING_KEY,
+        routingKey: string = DEFAULT_ROUTING_KEY,
     ): Promise<PublishingResult> {
         const { event, payload } = message
 
@@ -82,11 +80,11 @@ export class AmqpPublisher {
 
         try {
             if (!event || !exchangeName || !payload) {
-                const message = `Invalid event name [${event}] or exchange name [${exchangeName}] or payload [${JSON.stringify(payload)}]`
+                const errorMessage = `Invalid event name [${event}] or exchange name [${exchangeName}] or payload [${JSON.stringify(payload)}]`
 
-                this.logger.error(message)
+                this.logger.error(errorMessage)
 
-                throw new InternalServerError(message)
+                throw new InternalServerError(errorMessage)
             }
 
             const publishOptions = this.getPublishOptions(headers)
@@ -109,8 +107,8 @@ export class AmqpPublisher {
         exchangeName: ExchangeName,
         message: QueueMessageData,
         headers: MessageHeaders,
-        routingKey = DEFAULT_ROUTING_KEY,
-        responseTimeoutMs = this.directResponseTimeout,
+        routingKey: string = DEFAULT_ROUTING_KEY,
+        responseTimeoutMs: number = this.directResponseTimeout,
     ): Promise<T> {
         const startTime = process.hrtime.bigint()
 
@@ -152,7 +150,6 @@ export class AmqpPublisher {
         this.rpcChannel = await this.connection.createChannel(this.replyToQueueName)
         this.rpcChannel?.on('error', async () => await this.createRpcChannel())
 
-        // eslint-disable-next-line unicorn/prefer-event-target
         this.eventEmitter = new EventEmitter()
         this.eventEmitter?.setMaxListeners(0)
 
@@ -232,8 +229,8 @@ export class AmqpPublisher {
         exchangeName: ExchangeName,
         message: QueueMessageData,
         headers: MessageHeaders,
-        routingKey = DEFAULT_ROUTING_KEY,
-        responseTimeoutMs = this.directResponseTimeout,
+        routingKey: string = DEFAULT_ROUTING_KEY,
+        responseTimeoutMs: number = this.directResponseTimeout,
     ): Promise<DirectResponse<T>> {
         const { event, payload } = message
 

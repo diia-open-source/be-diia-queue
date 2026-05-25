@@ -1,3 +1,5 @@
+import { setTimeout } from 'node:timers/promises'
+
 import { expect } from 'vitest'
 
 import Logger from '@diia-inhouse/diia-logger'
@@ -13,12 +15,10 @@ import { makeMockMetricsService } from '@mocks/services/metricsService'
 
 import AmqpHelper from '@tests/utils/amqpHelper'
 
-describe(`${AmqpListener.name}`, async () => {
+describe('AmqpListener', () => {
     const connectionConfig = getRabbitMQConfig({ assertQueues: true, assertExchanges: true })
 
     const amqpHelper = new AmqpHelper(connectionConfig)
-
-    await amqpHelper.init()
 
     const logger = new Logger()
 
@@ -29,7 +29,10 @@ describe(`${AmqpListener.name}`, async () => {
         connectionConfig.socketOptions,
     )
 
-    await defaultAmqpConnection.connect()
+    beforeAll(async () => {
+        await amqpHelper.init()
+        await defaultAmqpConnection.connect()
+    })
 
     const metrics = makeMockMetricsService()
 
@@ -87,8 +90,9 @@ describe(`${AmqpListener.name}`, async () => {
             const messages: QueueMessageData[] = []
 
             const handler: MessageHandler = vi.fn().mockImplementation(async (message: QueueMessage) => {
+                // oxlint-disable-next-line vitest/no-conditional-in-test
                 if (message.data.event === beforeEvent) {
-                    await new Promise((resolve) => setTimeout(resolve, 1000))
+                    await setTimeout(1000)
                 }
 
                 messages.push(message.data)
@@ -110,7 +114,7 @@ describe(`${AmqpListener.name}`, async () => {
 
             await amqpHelper.publishMessageToExchange(exchangeName, messageDataAfterDelete, routingKey)
 
-            await new Promise((resolve) => setTimeout(resolve, 2000))
+            await setTimeout(2000)
 
             // Assert
             const expectedMessageDataBeforeDelete: QueueMessageData = getExpectedMsgData(

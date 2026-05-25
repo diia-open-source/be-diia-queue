@@ -1,37 +1,37 @@
 import { ValidationError } from '@diia-inhouse/errors'
 import { ValidationSchema } from '@diia-inhouse/validators'
 
-import { ExchangeName, ExchangeOptions, QueueOptions } from './messageBrokerServiceConfig'
-import { MessageHandler } from './messageHandler'
-import { PublishDirectOptions, PublishExternalEventOptions, PublishOptions, SubscribeOptions } from './options'
-import { MessageData, NackOptions, QueueMessageMetaData, RabbitMQConfig } from './providers/rabbitmq'
-import { MessagePayload, PublishingResult } from './providers/rabbitmq/amqpPublisher'
-import { EventName, QueueName, ServiceRulesConfig } from './queueConfig'
-import { QueueConnectionType } from './queueStatus'
+import { ExchangeName, ExchangeOptions, QueueOptions } from './messageBrokerServiceConfig.js'
+import { MessageHandler } from './messageHandler.js'
+import { PublishDirectOptions, PublishExternalEventOptions, PublishOptions, SubscribeOptions } from './options.js'
+import { MessagePayload, PublishingResult } from './providers/rabbitmq/amqpPublisher.js'
+import { MessageData, NackOptions, QueueMessageMetaData, RabbitMQConfig } from './providers/rabbitmq/index.js'
+import { EventName, QueueName, ServiceRulesConfig } from './queueConfig/index.js'
+import { QueueConnectionType } from './queueStatus.js'
 
-export * from './providers/rabbitmq'
+export * from './providers/rabbitmq/index.js'
 
-export * from './providers/rabbitmq/amqpConnection'
+export * from './providers/rabbitmq/amqpConnection.js'
 
-export * from './providers/rabbitmq/amqpPublisher'
+export * from './providers/rabbitmq/amqpPublisher.js'
 
-export * from './queueStatus'
+export * from './queueStatus.js'
 
-export * from './options'
+export * from './options.js'
 
-export * from './messageHandler'
+export * from './messageHandler.js'
 
-export * from './options'
+export * from './options.js'
 
-export * from './queueContext'
+export * from './queueContext.js'
 
-export * from './messageBrokerServiceConfig'
+export * from './messageBrokerServiceConfig.js'
 
-export * from './metrics'
+export * from './metrics/index.js'
 
-export * from './queueConfig'
+export * from './queueConfig/index.js'
 
-export * from './externalCommunicator'
+export * from './externalCommunicator.js'
 
 export type EventListeners = Partial<Record<EventName, EventBusListener>>
 
@@ -104,7 +104,7 @@ export interface EventBusListener extends Listener {
     isSync?: boolean
 
     validationErrorHandler?(error: ValidationError, uuid: string): Promise<void>
-    handler?(payload: unknown, meta: QueueMessageMetaData): Promise<unknown | void | NackOptions>
+    handler?(payload: unknown, meta: QueueMessageMetaData): Promise<unknown>
 }
 
 export interface TaskListener extends Listener {

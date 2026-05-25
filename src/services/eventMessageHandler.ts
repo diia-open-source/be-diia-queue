@@ -19,10 +19,9 @@ import {
     QueueMessageData,
     QueueMessageError,
     TaskListener,
-} from '../interfaces'
-import { EventName } from '../interfaces/queueConfig'
-import { ValidationResult } from '../interfaces/services/eventMessageHandler'
-import { EventMessageValidator } from './eventMessageValidator'
+} from '../interfaces/index.js'
+import { ValidationResult } from '../interfaces/services/eventMessageHandler.js'
+import { EventMessageValidator } from './eventMessageValidator.js'
 
 export class EventMessageHandler {
     private readonly noRequeueNackOptions = new NackOptions(false, false)
@@ -38,7 +37,7 @@ export class EventMessageHandler {
             return
         }
 
-        const listener = eventListeners[message.data.event as EventName]
+        const listener = eventListeners[message.data.event]
 
         await this.eventListenerMessageHandler(listener, message)
     }
@@ -89,7 +88,7 @@ export class EventMessageHandler {
         const useDirectReply = replyTo && correlationId
 
         let hasErrorOccurred = false
-        let result: unknown | void | NackOptions
+        let result: unknown
 
         const { isValid, error } = await this.validateData(data, listener)
 
@@ -152,7 +151,7 @@ export class EventMessageHandler {
             },
         } = receivedMessage
 
-        const data: unknown | ApiError = error ? utils.handleError(response, (err) => err) : response
+        const data: unknown = error ? utils.handleError(response, (err) => err) : response
 
         const messageData: QueueMessageData = {
             event,

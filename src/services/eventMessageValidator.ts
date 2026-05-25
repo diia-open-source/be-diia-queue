@@ -1,6 +1,6 @@
 import { AppValidator, ValidationSchema } from '@diia-inhouse/validators'
 
-import { QueueMessageData } from '../interfaces/providers/rabbitmq'
+import { QueueMessageData } from '../interfaces/providers/rabbitmq/index.js'
 
 export class EventMessageValidator {
     readonly metaValidationSchema: ValidationSchema = {

@@ -1,5 +1,5 @@
-import { MessageBrokerServiceType } from './messageBrokerServiceConfig'
-import { RabbitMQStatus } from './providers/rabbitmq'
+import { MessageBrokerServiceType } from './messageBrokerServiceConfig.js'
+import { RabbitMQStatus } from './providers/rabbitmq/index.js'
 
 export enum QueueConnectionType {
     Internal = 'internal',

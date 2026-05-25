@@ -2,18 +2,19 @@ import { AsyncLocalStorage } from 'node:async_hooks'
 import { randomUUID } from 'node:crypto'
 import { EventEmitter } from 'node:events'
 
-import { merge } from 'lodash'
+import lodash from 'lodash'
 import pTimeout from 'p-timeout'
 
 import { MetricsService } from '@diia-inhouse/diia-metrics'
 import { InternalServerError } from '@diia-inhouse/errors'
 import { Logger } from '@diia-inhouse/types'
 
-import constants from '../../constants'
-import { ConnectionStatus, PublishingResult, emptyMessageBrokerServiceConfig } from '../../interfaces'
-import { ExchangeOptions, MessageBrokerServiceConfig, QueueOptions } from '../../interfaces/messageBrokerServiceConfig'
-import { MessageHandler } from '../../interfaces/messageHandler'
-import { PublishDirectOptions, PublishOptions } from '../../interfaces/options'
+import constants from '../../constants.js'
+import { ConnectionStatus, PublishingResult, emptyMessageBrokerServiceConfig } from '../../interfaces/index.js'
+import { ExchangeOptions, MessageBrokerServiceConfig, QueueOptions } from '../../interfaces/messageBrokerServiceConfig.js'
+import { MessageHandler } from '../../interfaces/messageHandler.js'
+import { PublishDirectOptions, PublishOptions } from '../../interfaces/options.js'
+import { MessageHeaders } from '../../interfaces/providers/rabbitmq/amqpPublisher.js'
 import {
     ConnectionClientType,
     ConnectionList,
@@ -21,23 +22,21 @@ import {
     QueueMessageData,
     RabbitMQConfig,
     RabbitMQStatus,
-} from '../../interfaces/providers/rabbitmq'
-import { MessageHeaders } from '../../interfaces/providers/rabbitmq/amqpPublisher'
+} from '../../interfaces/providers/rabbitmq/index.js'
 import {
     EventName,
     QueueConfigByQueueName,
     QueueName,
     ServiceConfigByConfigType,
     TopicConfigByConfigType,
-} from '../../interfaces/queueConfig'
-import { QueueContext } from '../../interfaces/queueContext'
-import RabbitMQMetricsService from '../../services/metrics'
-import { AmqpAsserter } from './amqpAsserter'
-import { AmqpConnection } from './amqpConnection'
-import { AmqpListener } from './amqpListener'
-import { AmqpPublisher } from './amqpPublisher'
+} from '../../interfaces/queueConfig/index.js'
+import { QueueContext } from '../../interfaces/queueContext.js'
+import RabbitMQMetricsService from '../../services/metrics.js'
+import { AmqpAsserter } from './amqpAsserter.js'
+import { AmqpConnection } from './amqpConnection.js'
+import { AmqpListener } from './amqpListener.js'
+import { AmqpPublisher } from './amqpPublisher.js'
 
-// eslint-disable-next-line unicorn/prefer-event-target
 export class RabbitMQProvider extends EventEmitter {
     private initializingLock?: Promise<void>
 
@@ -65,9 +64,9 @@ export class RabbitMQProvider extends EventEmitter {
         private readonly portalEvents: EventName[],
         private readonly logger: Logger,
         private readonly metrics: MetricsService,
-        private readonly asyncLocalStorage?: AsyncLocalStorage<QueueContext>,
-        private readonly queuesConfig?: QueueConfigByQueueName,
-        private readonly messageBrokerServiceConfig?: MessageBrokerServiceConfig,
+        private readonly asyncLocalStorage: AsyncLocalStorage<QueueContext> | undefined = undefined,
+        private readonly queuesConfig: QueueConfigByQueueName | undefined = undefined,
+        private readonly messageBrokerServiceConfig: MessageBrokerServiceConfig | undefined = undefined,
     ) {
         super()
 
@@ -185,7 +184,7 @@ export class RabbitMQProvider extends EventEmitter {
             this.rabbitmqConfig.connection,
             this.logger,
             this.rabbitmqConfig.reconnectOptions,
-            merge(
+            lodash.merge(
                 {
                     clientProperties: {
                         connectionClientType: client,

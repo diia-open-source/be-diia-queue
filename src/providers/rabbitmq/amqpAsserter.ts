@@ -4,8 +4,14 @@ import { Channel, GetMessage, Options, Replies } from 'amqplib'
 
 import { Logger } from '@diia-inhouse/types'
 
-import constants from '../../constants'
-import { AmqpConnectionEventNames, Arguments, BaseQueueOptions, DeclareOptions, MessageBrokerServiceConfig } from '../../interfaces'
+import constants from '../../constants.js'
+import {
+    AmqpConnectionEventNames,
+    Arguments,
+    BaseQueueOptions,
+    DeclareOptions,
+    MessageBrokerServiceConfig,
+} from '../../interfaces/index.js'
 import {
     BindOptions,
     ExchangeName,
@@ -14,9 +20,9 @@ import {
     QueueOptions,
     QueueTypes,
     UnbindOptions,
-} from '../../interfaces/messageBrokerServiceConfig'
-import { QueueName } from '../../interfaces/queueConfig'
-import { AmqpConnection } from './amqpConnection'
+} from '../../interfaces/messageBrokerServiceConfig.js'
+import { QueueName } from '../../interfaces/queueConfig/index.js'
+import { AmqpConnection } from './amqpConnection.js'
 
 export class AmqpAsserter {
     static PrefixAlternate = 'Alternate'
@@ -69,7 +75,7 @@ export class AmqpAsserter {
     }
 
     async declareQueues(queuesOptions: QueueOptions[] = [], exchangesOptions: ExchangeOptions[] = []): Promise<void> {
-        for await (const queueOptions of queuesOptions) {
+        for (const queueOptions of queuesOptions) {
             const { name: queueName, redeclareOptions: { redeclare } = {} } = queueOptions
 
             if (redeclare) {
@@ -219,7 +225,7 @@ export class AmqpAsserter {
 
     async deleteExchanges(exchangesOptions: ExchangeOptions[]): Promise<Record<ExchangeName, Replies.Empty | undefined>> {
         const result: Record<ExchangeName, Replies.Empty | undefined> = {}
-        for await (const exchangeOptions of exchangesOptions) {
+        for (const exchangeOptions of exchangesOptions) {
             const { name: exchangeName } = exchangeOptions
 
             result[exchangeName] = await this.deleteExchange(exchangeName)
@@ -269,7 +275,7 @@ export class AmqpAsserter {
     async assertQueues(queueOptions: QueueOptions[]): Promise<Record<QueueName, Replies.AssertQueue | undefined>> {
         const result: Record<QueueName, Replies.AssertQueue | undefined> = {}
 
-        for await (const queueOption of queueOptions) {
+        for (const queueOption of queueOptions) {
             result[queueOption.name] = await this.assertQueue(queueOption)
         }
 
@@ -303,11 +309,11 @@ export class AmqpAsserter {
 
                 this.logger.info(`Queue ${queueName} has been declared`, { queueOptions, result })
 
-                for await (const bindOptions of bindTo) {
+                for (const bindOptions of bindTo) {
                     await this.bindQueueToExchange(queueName, bindOptions)
                 }
 
-                for await (const unbindOption of unbindFrom) {
+                for (const unbindOption of unbindFrom) {
                     await this.unbindQueueFromExchange(queueName, unbindOption)
                 }
 
@@ -323,7 +329,7 @@ export class AmqpAsserter {
     async assertExchanges(exchangeOptions: ExchangeOptions[]): Promise<Record<QueueName, Replies.AssertExchange | undefined>> {
         const result: Record<ExchangeName, Replies.AssertExchange | undefined> = {}
 
-        for await (const exchangeOption of exchangeOptions) {
+        for (const exchangeOption of exchangeOptions) {
             result[exchangeOption.name] = await this.assertExchange(exchangeOption)
         }
 
@@ -368,7 +374,7 @@ export class AmqpAsserter {
     async unbindQueueFromExchanges(queueOptions: QueueOptions): Promise<undefined> {
         const { name: queueName, unbindFrom = [] } = queueOptions
 
-        for await (const unbindOption of unbindFrom) {
+        for (const unbindOption of unbindFrom) {
             await this.unbindQueueFromExchange(queueName, unbindOption)
         }
     }
@@ -395,7 +401,7 @@ export class AmqpAsserter {
     }
 
     async bindExchangeToExchanges(exchangeName: ExchangeName, bindTo: BindOptions[]): Promise<undefined> {
-        for await (const bindOption of bindTo) {
+        for (const bindOption of bindTo) {
             await this.bindExchangeToExchange(exchangeName, bindOption)
         }
     }
@@ -457,8 +463,8 @@ export class AmqpAsserter {
     }
 
     private async readConfig(declarationConfigPath: string): Promise<MessageBrokerServiceConfig> {
-        // eslint-disable-next-line security/detect-non-literal-fs-filename
-        const data = await readFile(declarationConfigPath, { encoding: 'utf8' }) // nosemgrep: eslint.detect-non-literal-fs-filename
+        // oxlint-disable-next-line security/detect-non-literal-fs-filename
+        const data = await readFile(declarationConfigPath, { encoding: 'utf8' })
 
         return JSON.parse(data) as MessageBrokerServiceConfig
     }

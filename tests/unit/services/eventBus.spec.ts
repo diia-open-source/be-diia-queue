@@ -125,7 +125,7 @@ describe('EventBus', () => {
         payload: { text: 'test-text' },
     }
 
-    describe('subscriber side', async () => {
+    describe('subscriber side', () => {
         describe('method: `onInit`', () => {
             it('should produce no listeners and no subscriptions when consumerEnabled is false', async () => {
                 // Arrange
@@ -329,7 +329,7 @@ describe('EventBus', () => {
                 })
             })
 
-            describe('mix config', async () => {
+            describe('mix config', () => {
                 it('should successfully initialize eventBus', async () => {
                     // Arrange
                     queueProvider.getConfig.mockReturnValue(defaultExportConfig)
@@ -463,7 +463,7 @@ describe('EventBus', () => {
                 })
             })
 
-            describe('mix config', async () => {
+            describe('mix config', () => {
                 it('should successfully initialize eventBus', async () => {
                     // Arrange
                     queueProvider.getConfig.mockReturnValue(defaultExportConfig)
@@ -622,7 +622,6 @@ describe('EventBus', () => {
                     expect(spiedSubscribe).toHaveBeenNthCalledWith(1, queueOptions1.name, expect.any(Function))
                     expect(spiedSubscribe).toHaveBeenNthCalledWith(2, queueOptions2.name, expect.any(Function))
 
-                    // eslint-disable-next-line unicorn/no-useless-undefined
                     expect(spiedPublish).toHaveBeenNthCalledWith(1, expectedMsgData, exchangeOptions.name, queueRoutingKey1, undefined)
                     expect(spiedPublish).toHaveBeenNthCalledWith(2, expectedMsgData, exchangeOptions.name, queueRoutingKey2, publishOpts2)
                 })
@@ -630,7 +629,7 @@ describe('EventBus', () => {
         })
     })
 
-    describe('publisher side', async () => {
+    describe('publisher side', () => {
         describe('method: `onInit`', () => {
             describe('global config', () => {
                 it('should successfully initialize event bus', async () => {
@@ -864,7 +863,6 @@ describe('EventBus', () => {
                     expect(spiedSubscribe).not.toHaveBeenCalledOnce()
                     expect(spiedPublish).toHaveBeenCalledTimes(2)
 
-                    // eslint-disable-next-line unicorn/no-useless-undefined
                     expect(spiedPublish).toHaveBeenNthCalledWith(1, expectedMsgData, exchangeOptions.name, queueRoutingKey1, undefined)
                     expect(spiedPublish).toHaveBeenNthCalledWith(2, expectedMsgData, exchangeOptions.name, queueRoutingKey2, publishOpts2)
                 })
@@ -918,9 +916,7 @@ describe('EventBus', () => {
                     expect(spiedSubscribe).not.toHaveBeenCalledOnce()
 
                     expect(spiedPublish).toHaveBeenCalledTimes(3)
-                    // eslint-disable-next-line unicorn/no-useless-undefined
                     expect(spiedPublish).toHaveBeenNthCalledWith(1, expectedMsgData1, exchangeOptions.name, queueRoutingKey1, undefined)
-                    // eslint-disable-next-line unicorn/no-useless-undefined
                     expect(spiedPublish).toHaveBeenNthCalledWith(2, expectedMsgData1, exchangeOptions.name, queueRoutingKey2, undefined)
                     expect(spiedPublish).toHaveBeenNthCalledWith(3, expectedMsgData, defaultExchangeName, queueRoutingKey3, {})
                 })

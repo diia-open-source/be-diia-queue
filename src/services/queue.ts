@@ -17,9 +17,9 @@ import {
     QueueConnectionType,
     QueueContext,
     emptyMessageBrokerServiceConfig,
-} from '../interfaces'
-import { QueueStatus } from '../interfaces/queueStatus'
-import { RabbitMQProvider } from '../providers/rabbitmq'
+} from '../interfaces/index.js'
+import { QueueStatus } from '../interfaces/queueStatus.js'
+import { RabbitMQProvider } from '../providers/rabbitmq/index.js'
 
 export class Queue implements OnHealthCheck {
     private readonly internalRabbitMQProvidersMap: Map<MessageBrokerInternalServiceType, RabbitMQProvider> = new Map()

@@ -86,7 +86,7 @@ describe('ScheduledTask', () => {
 
     const emptyExportConfig = getExportConfig()
 
-    describe('subscriber side', async () => {
+    describe('subscriber side', () => {
         const partialDefaultSubscriberExportConfig: Partial<ExportConfig> = {
             queues: {
                 [defaultQueueName]: {
@@ -127,7 +127,7 @@ describe('ScheduledTask', () => {
         )
 
         describe('method: `onInit`', () => {
-            describe('global config', async () => {
+            describe('global config', () => {
                 it('should successfully initialize', async () => {
                     // Arrange
                     queueProvider.getConfig.mockReturnValue(defaultSubscriberExportConfig)
@@ -441,9 +441,7 @@ describe('ScheduledTask', () => {
                     expect(spiedSubscribe).toHaveBeenNthCalledWith(2, queueOptions2.name, expect.any(Function))
 
                     expect(spiedPublish).toHaveBeenCalledTimes(2)
-                    // eslint-disable-next-line unicorn/no-useless-undefined
                     expect(spiedPublish).toHaveBeenNthCalledWith(1, expectedMsgData, exchangeOptions.name, queueRoutingKey1, undefined)
-                    // eslint-disable-next-line unicorn/no-useless-undefined
                     expect(spiedPublish).toHaveBeenNthCalledWith(2, expectedMsgData, exchangeOptions.name, queueRoutingKey2, undefined)
                 })
             })
@@ -501,9 +499,7 @@ describe('ScheduledTask', () => {
                     expect(spiedSubscribe).toHaveBeenNthCalledWith(3, queueOptions3.name, expect.any(Function))
 
                     expect(spiedPublish).toHaveBeenCalledTimes(3)
-                    // eslint-disable-next-line unicorn/no-useless-undefined
                     expect(spiedPublish).toHaveBeenNthCalledWith(1, expectedMsgData, exchangeOptions.name, queueRoutingKey1, undefined)
-                    // eslint-disable-next-line unicorn/no-useless-undefined
                     expect(spiedPublish).toHaveBeenNthCalledWith(2, expectedMsgData, exchangeOptions.name, queueRoutingKey3, undefined)
                     expect(spiedPublish).toHaveBeenNthCalledWith(3, expectedMsgData, defaultExchangeName, defaultQueueRoutingKey, {})
                 })
@@ -511,7 +507,7 @@ describe('ScheduledTask', () => {
         })
     })
 
-    describe('publisher side', async () => {
+    describe('publisher side', () => {
         const partialExportConfig: Partial<ExportConfig> = {
             topics: {
                 [defaultExchangeName]: {
@@ -527,7 +523,7 @@ describe('ScheduledTask', () => {
         })
 
         describe('method: `onInit`', () => {
-            describe('global config', async () => {
+            describe('global config', () => {
                 it('should successfully initialize', async () => {
                     // Arrange
                     queueProvider.getConfig.mockReturnValue(defaultPublisherExportConfig)
@@ -748,9 +744,7 @@ describe('ScheduledTask', () => {
                     expect(spiedSubscribe).not.toHaveBeenCalledOnce()
 
                     expect(spiedPublish).toHaveBeenCalledTimes(2)
-                    // eslint-disable-next-line unicorn/no-useless-undefined
                     expect(spiedPublish).toHaveBeenNthCalledWith(1, expectedMsgData, exchangeOptions.name, queueRoutingKey1, undefined)
-                    // eslint-disable-next-line unicorn/no-useless-undefined
                     expect(spiedPublish).toHaveBeenNthCalledWith(2, expectedMsgData, exchangeOptions.name, queueRoutingKey2, undefined)
                 })
             })
@@ -800,9 +794,7 @@ describe('ScheduledTask', () => {
                     expect(spiedSubscribe).not.toHaveBeenCalledOnce()
 
                     expect(spiedPublish).toHaveBeenCalledTimes(3)
-                    // eslint-disable-next-line unicorn/no-useless-undefined
                     expect(spiedPublish).toHaveBeenNthCalledWith(1, expectedMsgData1, exchangeOptions.name, queueRoutingKey1, undefined)
-                    // eslint-disable-next-line unicorn/no-useless-undefined
                     expect(spiedPublish).toHaveBeenNthCalledWith(2, expectedMsgData1, exchangeOptions.name, queueRoutingKey2, undefined)
                     expect(spiedPublish).toHaveBeenNthCalledWith(3, expectedMsgData2, defaultExchangeName, defaultQueueRoutingKey, {})
                 })

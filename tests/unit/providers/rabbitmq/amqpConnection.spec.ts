@@ -1,4 +1,3 @@
-/* eslint-disable unicorn/prefer-event-target */
 import { EventEmitter } from 'node:events'
 
 import * as amqp from 'amqplib'

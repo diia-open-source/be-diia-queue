@@ -1,13 +1,14 @@
 import { randomUUID } from 'node:crypto'
+import { setTimeout as sleep } from 'node:timers/promises'
 
 import { Channel } from 'amqplib'
-import { ConnectionStatus, Headers, PublisherOptions } from 'src/interfaces'
 import { expect } from 'vitest'
 import { mock } from 'vitest-mock-extended'
 
 import { ErrorType, ExternalCommunicatorError, InternalServerError } from '@diia-inhouse/errors'
 import { HttpStatusCode } from '@diia-inhouse/types'
 
+import { ConnectionStatus, Headers, PublisherOptions } from '@src/interfaces'
 import { AmqpConnection } from '@src/providers/rabbitmq/amqpConnection'
 import { AmqpPublisher } from '@src/providers/rabbitmq/amqpPublisher'
 
@@ -58,10 +59,7 @@ describe('AmqpPublisher', () => {
             await amqpPublisher.init()
 
             amqpConnection.emit('ready')
-            await new Promise((resolve) => {
-                // do not complete test case until ready event is handled
-                setTimeout(resolve, 0)
-            })
+            await sleep()
 
             expect(connectionMock.createChannel).toHaveBeenCalledWith()
         })
@@ -78,10 +76,7 @@ describe('AmqpPublisher', () => {
             await amqpPublisher.init()
 
             amqpConnection.emit('ready')
-            await new Promise((resolve) => {
-                // do not complete test case until ready event is handled
-                setTimeout(resolve, 0)
-            })
+            await sleep()
 
             expect(connectionMock.createChannel).toHaveBeenCalledWith()
         })
@@ -221,7 +216,7 @@ describe('AmqpPublisher', () => {
                 amqpPublisher.publishToExchangeDirect(defaultExchangeName, defaultMessage, defaultHeaders, defaultRoutingKey),
             ).rejects.toEqual(
                 new ExternalCommunicatorError(
-                    'Time out for external event: ' + validPublishToExchangeParams.eventName,
+                    `Time out for external event: ${validPublishToExchangeParams.eventName}`,
                     HttpStatusCode.GATEWAY_TIMEOUT,
                 ),
             )
@@ -289,7 +284,7 @@ describe('AmqpPublisher', () => {
         })
     })
 
-    describe('metrics collecting', async () => {
+    describe('metrics collecting', () => {
         describe('method: publishToExchange', () => {
             it('should collect metrics when a response get successfully', async () => {
                 // Arrange

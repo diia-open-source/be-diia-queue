@@ -12,8 +12,7 @@ export interface AmqpConfig {
 export type ConnectOptions = Options.Connect
 
 export interface SocketOptions {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    clientProperties?: Record<string, any>
+    clientProperties?: Record<string, unknown>
 }
 
 export interface ReconnectOptions {

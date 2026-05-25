@@ -1,17 +1,19 @@
+import { setTimeout } from 'node:timers/promises'
+
 import { Channel, ConsumeMessage, Message } from 'amqplib'
 import { Options } from 'amqplib/properties'
 
 import { ApiError, ErrorType } from '@diia-inhouse/errors'
 import { Logger } from '@diia-inhouse/types'
 
-import { LabelUnknown, MessageHandler, NackOptions, QueueOptions, RecreateChannelOptions } from '../../interfaces'
-import { ConsumerOptions } from '../../interfaces/messageBrokerServiceConfig'
-import { Headers, QueueMessage, QueueMessageData } from '../../interfaces/providers/rabbitmq'
-import { ConnectionStatus } from '../../interfaces/providers/rabbitmq/amqpConnection'
-import { QueueName } from '../../interfaces/queueConfig'
-import { totalListenerChannelErrorsMetric } from '../../metrics'
-import RabbitMQMetricsService from '../../services/metrics'
-import { AmqpConnection } from './amqpConnection'
+import { LabelUnknown, MessageHandler, NackOptions, QueueOptions, RecreateChannelOptions } from '../../interfaces/index.js'
+import { ConsumerOptions } from '../../interfaces/messageBrokerServiceConfig.js'
+import { ConnectionStatus } from '../../interfaces/providers/rabbitmq/amqpConnection.js'
+import { Headers, QueueMessage, QueueMessageData } from '../../interfaces/providers/rabbitmq/index.js'
+import { QueueName } from '../../interfaces/queueConfig/index.js'
+import { totalListenerChannelErrorsMetric } from '../../metrics/index.js'
+import RabbitMQMetricsService from '../../services/metrics.js'
+import { AmqpConnection } from './amqpConnection.js'
 
 export class AmqpListener {
     private readonly infiniteRecreateChannelTriesCount = 0
@@ -70,12 +72,12 @@ export class AmqpListener {
         const channel = this.getQueueChannel(queueName)
         const consumerTags = this.queueConsumerTagsMap.get(queueName) || []
 
-        for await (const consumerTag of consumerTags) {
+        for (const consumerTag of consumerTags) {
             await channel?.cancel(consumerTag)
         }
     }
 
-    async listenQueue(queueName: QueueName, callback: MessageHandler): Promise<void | never> {
+    async listenQueue(queueName: QueueName, callback: MessageHandler): Promise<void> {
         this.logger.debug(`Start listen queue [${queueName}]`)
 
         try {
@@ -211,12 +213,12 @@ export class AmqpListener {
                 this.rabbitMQMetrics.collectResponseTotalMetric(startTime, eventName, source, this.systemServiceName)
 
                 return result
-            } catch (err) {
-                const errorType = err instanceof ApiError ? err.getType() : ErrorType.Unoperated
+            } catch (callbackErr) {
+                const errorType = callbackErr instanceof ApiError ? callbackErr.getType() : ErrorType.Unoperated
 
                 this.rabbitMQMetrics.collectResponseTotalMetric(startTime, eventName, source, this.systemServiceName, errorType)
 
-                throw err
+                throw callbackErr
             }
         }
     }
@@ -240,12 +242,12 @@ export class AmqpListener {
 
         const waitingTime = timeout * backoffCoefficient * recreateChannelTriesCounter
 
-        await new Promise((resolve) => setTimeout(resolve, waitingTime))
+        await setTimeout(waitingTime)
 
         await this.createChannelAndListenQueue(queueName)
     }
 
-    private parseMessage(message: ConsumeMessage | null): [QueueMessageData | null, unknown | null] {
+    private parseMessage(message: ConsumeMessage | null): [QueueMessageData | null, unknown] {
         try {
             const content = message?.content.toString() || ''
 

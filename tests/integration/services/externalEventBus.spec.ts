@@ -1,9 +1,10 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
+import { setTimeout } from 'node:timers/promises'
 
 import { describe } from 'vitest'
 import { mock } from 'vitest-mock-extended'
 
-import DiiaLogger from '@diia-inhouse/diia-logger'
+import { DiiaLogger } from '@diia-inhouse/diia-logger'
 import { EnvService } from '@diia-inhouse/env'
 import { LogLevel } from '@diia-inhouse/types'
 import { AppValidator } from '@diia-inhouse/validators'
@@ -26,7 +27,7 @@ import { makeMockMetricsService } from '@mocks/services/metricsService'
 
 import AmqpHelper from '@tests/utils/amqpHelper'
 
-describe(`${ExternalEventBus.name}`, async () => {
+describe('ExternalEventBus', () => {
     const hostname = 'hostname'
     const systemServiceName = 'test-service-name'
 
@@ -34,7 +35,9 @@ describe(`${ExternalEventBus.name}`, async () => {
 
     const amqpHelper = new AmqpHelper(connectionConfig)
 
-    await amqpHelper.init()
+    beforeAll(async () => {
+        await amqpHelper.init()
+    })
 
     const asyncLocalStorage = new AsyncLocalStorage<QueueContext>()
     const logger = new DiiaLogger({ logLevel: LogLevel.DEBUG }, asyncLocalStorage)
@@ -152,7 +155,7 @@ describe(`${ExternalEventBus.name}`, async () => {
 
             // Assert
 
-            await new Promise((resolve) => setTimeout(resolve, 1000))
+            await setTimeout(1000)
 
             expect(handlerMock).toHaveBeenCalledTimes(2)
             expect(handlerMock).toHaveBeenNthCalledWith(1, classicPayload.payload, { date: expect.any(Date) })
@@ -220,8 +223,6 @@ describe(`${ExternalEventBus.name}`, async () => {
                 ],
             })
 
-            const connectionConfig = getRabbitMQConfig({ assertQueues: true, assertExchanges: true })
-
             try {
                 await amqpHelper.deleteQueues([quorumQueueName, classicQueueName])
                 await amqpHelper.assertExchanges([alternativeExchangeOptions, exchangeOptions])
@@ -287,7 +288,7 @@ describe(`${ExternalEventBus.name}`, async () => {
             await externalEventBus.publishToExchange(exchangeOptions.name, routingKey, quorumPayload)
 
             // Assert
-            await new Promise((resolve) => setTimeout(resolve, 1000))
+            await setTimeout(1000)
 
             expect(handlerMock).toHaveBeenCalledTimes(3)
             expect(handlerMock).toHaveBeenNthCalledWith(1, classicPayload.payload, { date: expect.any(Date) })
@@ -324,6 +325,12 @@ describe(`${ExternalEventBus.name}`, async () => {
                 ],
             })
 
+            try {
+                await amqpHelper.deleteQueues([queueOptions.name])
+            } catch {
+                // no need to check error
+            }
+
             const queueConnectionConfig: QueueConnectionConfig = {
                 serviceRulesConfig: {
                     ...defaultServiceRulesConfig,
@@ -359,7 +366,7 @@ describe(`${ExternalEventBus.name}`, async () => {
             const msg = getMsgData('test-event', { data: 'test-message' })
 
             await amqpHelper.publishMessageToExchange(exchangeName, msg, routingKey)
-            await new Promise((resolve) => setTimeout(resolve, 1000))
+            await setTimeout(1000)
 
             // Act
             await externalEventBus.onDestroy()

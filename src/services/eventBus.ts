@@ -9,14 +9,14 @@ import {
     MessageBrokerServiceEventsListener,
     PublishOptions,
     PublishingResult,
-} from '../interfaces'
-import { ExchangeOptions } from '../interfaces/messageBrokerServiceConfig'
-import { MessagePayload } from '../interfaces/providers/rabbitmq/amqpPublisher'
-import { EventName, QueueName } from '../interfaces/queueConfig'
-import { RabbitMQProvider } from '../providers/rabbitmq'
-import Communicator from './communicator'
-import { EventCommunicator } from './eventCommunicator'
-import { EventMessageHandler } from './eventMessageHandler'
+} from '../interfaces/index.js'
+import { ExchangeOptions } from '../interfaces/messageBrokerServiceConfig.js'
+import { MessagePayload } from '../interfaces/providers/rabbitmq/amqpPublisher.js'
+import { EventName, QueueName } from '../interfaces/queueConfig/index.js'
+import { RabbitMQProvider } from '../providers/rabbitmq/index.js'
+import Communicator from './communicator.js'
+import { EventCommunicator } from './eventCommunicator.js'
+import { EventMessageHandler } from './eventMessageHandler.js'
 
 export class EventBus extends Communicator implements EventBusQueue, OnInit {
     private readonly eventCommunicator: EventCommunicator
@@ -28,7 +28,7 @@ export class EventBus extends Communicator implements EventBusQueue, OnInit {
         logger: Logger,
         hostName: string,
         systemServiceName: string,
-        private readonly queueName?: QueueName,
+        private readonly queueName: QueueName | undefined = undefined,
     ) {
         super(logger, queueProvider, hostName, systemServiceName)
 

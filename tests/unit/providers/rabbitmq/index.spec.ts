@@ -1,4 +1,5 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
+import { setTimeout } from 'node:timers/promises'
 
 import { Channel } from 'amqplib'
 import { TimeoutError } from 'p-timeout'
@@ -53,7 +54,7 @@ describe('RabbitMQProvider', () => {
 
     const rabbitMQConfig = getRabbitMQConfig()
 
-    describe('method: `publishExternalDirect`', async () => {
+    describe('method: `publishExternalDirect`', () => {
         const rabbitMQProvider = new RabbitMQProvider(
             systemServiceName,
             rabbitMQConfig,
@@ -66,11 +67,12 @@ describe('RabbitMQProvider', () => {
             queueConfig,
         )
 
-        vi.spyOn(rabbitMQProvider, 'makeAMQPAsserter').mockResolvedValue(amqpAsserter)
-        vi.spyOn(rabbitMQProvider, 'makeAMQPListener').mockResolvedValue(amqpListener)
-        vi.spyOn(rabbitMQProvider, 'makeAMQPPublisher').mockResolvedValue(amqpPublisher)
-
-        await rabbitMQProvider.init()
+        beforeAll(async () => {
+            vi.spyOn(rabbitMQProvider, 'makeAMQPAsserter').mockResolvedValue(amqpAsserter)
+            vi.spyOn(rabbitMQProvider, 'makeAMQPListener').mockResolvedValue(amqpListener)
+            vi.spyOn(rabbitMQProvider, 'makeAMQPPublisher').mockResolvedValue(amqpPublisher)
+            await rabbitMQProvider.init()
+        })
 
         it('should call publishToExchangeDirect', async () => {
             // Arrange
@@ -97,15 +99,15 @@ describe('RabbitMQProvider', () => {
         })
     })
 
-    describe('method: `publish`', async () => {
-        const defaultServiceConfig: ServiceConfigByConfigType = {
+    describe('method: `publish`', () => {
+        const publishServiceConfig: ServiceConfigByConfigType = {
             publish: [defaultEventName],
         }
 
         const rabbitMQProvider = new RabbitMQProvider(
             systemServiceName,
             rabbitMQConfig,
-            defaultServiceConfig,
+            publishServiceConfig,
             defaultTopicConfig,
             defaultPortalEvents,
             logger,
@@ -114,11 +116,12 @@ describe('RabbitMQProvider', () => {
             queueConfig,
         )
 
-        vi.spyOn(rabbitMQProvider, 'makeAMQPAsserter').mockResolvedValue(amqpAsserter)
-        vi.spyOn(rabbitMQProvider, 'makeAMQPListener').mockResolvedValue(amqpListener)
-        vi.spyOn(rabbitMQProvider, 'makeAMQPPublisher').mockResolvedValue(amqpPublisher)
-
-        await rabbitMQProvider.init()
+        beforeAll(async () => {
+            vi.spyOn(rabbitMQProvider, 'makeAMQPAsserter').mockResolvedValue(amqpAsserter)
+            vi.spyOn(rabbitMQProvider, 'makeAMQPListener').mockResolvedValue(amqpListener)
+            vi.spyOn(rabbitMQProvider, 'makeAMQPPublisher').mockResolvedValue(amqpPublisher)
+            await rabbitMQProvider.init()
+        })
 
         const defaultReqRoutingKey = `queue.diia.${defaultEventName}.req`
         const defaultResponseRoutingKey = `diia.queue.diia.${defaultEventName}.res`
@@ -129,11 +132,7 @@ describe('RabbitMQProvider', () => {
             const publishTimeout = 100
 
             const spiedPublishToExchange = amqpPublisher.publishToExchange.mockImplementationOnce(async () => {
-                return await new Promise((resolve) => {
-                    setTimeout(() => {
-                        resolve()
-                    }, publishTimeout * 2)
-                })
+                await setTimeout(publishTimeout * 2)
             })
 
             const options: PublishExternalEventOptions = { publishTimeout }
@@ -162,11 +161,7 @@ describe('RabbitMQProvider', () => {
             const publishTimeout = 100
 
             const spiedPublishToExchange = amqpPublisher.publishToExchange.mockImplementationOnce(async () => {
-                return await new Promise((resolve) => {
-                    setTimeout(() => {
-                        resolve()
-                    }, publishTimeout * 2)
-                })
+                await setTimeout(publishTimeout * 2)
             })
 
             const options: PublishExternalEventOptions = { publishTimeout, throwOnPublishTimeout: false }
@@ -192,7 +187,7 @@ describe('RabbitMQProvider', () => {
         })
     })
 
-    describe('method: `subscribe`', async () => {
+    describe('method: `subscribe`', () => {
         const serviceConfig: ServiceConfigByConfigType = {
             subscribe: [defaultEventName],
         }
@@ -209,13 +204,14 @@ describe('RabbitMQProvider', () => {
             queueConfig,
         )
 
-        vi.spyOn(rabbitMQProvider, 'makeAMQPAsserter').mockResolvedValue(amqpAsserter)
-        vi.spyOn(rabbitMQProvider, 'makeAMQPListener').mockResolvedValue(amqpListener)
-        vi.spyOn(rabbitMQProvider, 'makeAMQPPublisher').mockResolvedValue(amqpPublisher)
-
-        await rabbitMQProvider.init({
-            queuesOptions: [{ name: defaultEventName, bindTo: [] }],
-            exchangesOptions: [],
+        beforeAll(async () => {
+            vi.spyOn(rabbitMQProvider, 'makeAMQPAsserter').mockResolvedValue(amqpAsserter)
+            vi.spyOn(rabbitMQProvider, 'makeAMQPListener').mockResolvedValue(amqpListener)
+            vi.spyOn(rabbitMQProvider, 'makeAMQPPublisher').mockResolvedValue(amqpPublisher)
+            await rabbitMQProvider.init({
+                queuesOptions: [{ name: defaultEventName, bindTo: [] }],
+                exchangesOptions: [],
+            })
         })
 
         it('should call listenQueue', async () => {
@@ -329,7 +325,7 @@ describe('RabbitMQProvider', () => {
                 queuesOptions: [{ name: 'test-queue', bindTo: [] }],
                 exchangesOptions: [],
             })
-            const status = await rabbitMQProvider.getStatus()
+            const status = rabbitMQProvider.getStatus()
 
             // Assert
             expect(status).toEqual({

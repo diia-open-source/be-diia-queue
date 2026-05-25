@@ -1,3 +1,5 @@
+import { setTimeout } from 'node:timers/promises'
+
 import { GetMessage } from 'amqplib'
 
 import Logger from '@diia-inhouse/diia-logger'
@@ -14,7 +16,7 @@ import { getRabbitMQConfig } from '@mocks/config'
 import { getExpectedMsgData } from '@mocks/providers/rabbitmq/amqpPublisher'
 import { makeMockMetricsService } from '@mocks/services/metricsService'
 
-describe(`${AmqpAsserter.name}`, async () => {
+describe('AmqpAsserter', () => {
     const connectionConfig = getRabbitMQConfig({ assertQueues: true, assertExchanges: true })
 
     const logger = new Logger()
@@ -26,8 +28,6 @@ describe(`${AmqpAsserter.name}`, async () => {
         connectionConfig.socketOptions,
     )
 
-    await amqpConnection.connect()
-
     const metrics = makeMockMetricsService()
 
     const rabbitmqMetricsService = new RabbitMQMetricsService(metrics)
@@ -36,7 +36,10 @@ describe(`${AmqpAsserter.name}`, async () => {
 
     const amqpPublisher: AmqpPublisher = new AmqpPublisher(amqpConnection, logger, rabbitmqMetricsService, systemServiceName, {})
 
-    await amqpPublisher.init()
+    beforeAll(async () => {
+        await amqpConnection.connect()
+        await amqpPublisher.init()
+    })
 
     describe(`method ${AmqpAsserter.prototype.redeclareQueue.name}`, () => {
         it('should redeclare queue', async () => {
@@ -108,6 +111,7 @@ describe(`${AmqpAsserter.name}`, async () => {
 
             while (true) {
                 const message = await channel.get(queueName, { noAck: true })
+                // oxlint-disable-next-line vitest/no-conditional-in-test
                 if (!message) {
                     break
                 }
@@ -199,6 +203,7 @@ describe(`${AmqpAsserter.name}`, async () => {
 
             while (true) {
                 const message = await channel.get(queueName, { noAck: true })
+                // oxlint-disable-next-line vitest/no-conditional-in-test
                 if (!message) {
                     break
                 }
@@ -226,7 +231,7 @@ describe(`${AmqpAsserter.name}`, async () => {
             await amqpAsserter.disconnect()
 
             // Assert
-            await new Promise((resolve) => setTimeout(resolve, 1000))
+            await setTimeout(1000)
 
             expect(createChannelMock).not.toHaveBeenCalled()
         })

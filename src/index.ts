@@ -1,7 +1,7 @@
-export * from './interfaces'
+export * from './interfaces/index.js'
 
-export * from './interfaces/deps'
+export * from './interfaces/deps.js'
 
-export * from './services'
+export * from './services/index.js'
 
-export * from './providers'
+export * from './providers/index.js'

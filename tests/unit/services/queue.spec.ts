@@ -75,7 +75,7 @@ describe('Queue', () => {
             const result = await defaultQueueService.onHealthCheck()
 
             // Assert
-            await expect(result).toEqual({
+            expect(result).toEqual({
                 status: expectedStatus,
                 details: {
                     rabbit: {

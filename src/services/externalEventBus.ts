@@ -3,7 +3,7 @@ import { EnvService } from '@diia-inhouse/env'
 import { ErrorType, ExternalCommunicatorError } from '@diia-inhouse/errors'
 import { HttpStatusCode, OnInit } from '@diia-inhouse/types'
 
-import constants from '../constants'
+import constants from '../constants.js'
 import {
     EventBusListener,
     ExchangeType,
@@ -18,13 +18,13 @@ import {
     QueueMessageMetaData,
     QueueName,
     QueueTypes,
-} from '../interfaces'
-import { ExchangeName, ExchangeOptions, QueueOptions } from '../interfaces/messageBrokerServiceConfig'
-import { EventName } from '../interfaces/queueConfig'
-import { RabbitMQProvider } from '../providers/rabbitmq'
-import Communicator from './communicator'
-import { EventCommunicator } from './eventCommunicator'
-import { EventMessageHandler } from './eventMessageHandler'
+} from '../interfaces/index.js'
+import { ExchangeName, ExchangeOptions, QueueOptions } from '../interfaces/messageBrokerServiceConfig.js'
+import { EventName } from '../interfaces/queueConfig/index.js'
+import { RabbitMQProvider } from '../providers/rabbitmq/index.js'
+import Communicator from './communicator.js'
+import { EventCommunicator } from './eventCommunicator.js'
+import { EventMessageHandler } from './eventMessageHandler.js'
 
 export class ExternalEventBus extends Communicator implements ExternalEventBusQueue, OnInit {
     private readonly eventCommunicator: EventCommunicator

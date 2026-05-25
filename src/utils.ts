@@ -1,4 +1,4 @@
-import { EventBusListener, EventListeners } from './interfaces'
+import { EventBusListener, EventListeners } from './interfaces/index.js'
 
 export function collectEventBusListeners(eventBusListeners: EventBusListener[]): EventListeners {
     const eventListeners: EventListeners = {}

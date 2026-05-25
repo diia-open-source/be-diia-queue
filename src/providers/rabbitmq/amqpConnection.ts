@@ -1,11 +1,12 @@
 import { EventEmitter } from 'node:events'
 import * as os from 'node:os'
+import { setTimeout } from 'node:timers/promises'
 
 import { Channel, ChannelModel, Options, connect } from 'amqplib'
 
 import { Logger } from '@diia-inhouse/types'
 
-import { ConnectionStatus, ReconnectOptions, SocketOptions } from '../../interfaces/providers/rabbitmq/amqpConnection'
+import { ConnectionStatus, ReconnectOptions, SocketOptions } from '../../interfaces/providers/rabbitmq/amqpConnection.js'
 
 const defaultSocketOptions: SocketOptions = {
     clientProperties: {
@@ -15,7 +16,6 @@ const defaultSocketOptions: SocketOptions = {
 
 const defaultReconnectTimeoutMs = 5000
 
-// eslint-disable-next-line unicorn/prefer-event-target
 export class AmqpConnection extends EventEmitter {
     private reconnectEnabled = false
 
@@ -28,7 +28,7 @@ export class AmqpConnection extends EventEmitter {
     constructor(
         private readonly connectOptions: Options.Connect,
         private readonly logger: Logger,
-        private readonly reconnectOptions?: ReconnectOptions,
+        private readonly reconnectOptions: ReconnectOptions | undefined = undefined,
         private readonly socketOptions: SocketOptions = defaultSocketOptions,
     ) {
         super()
@@ -114,9 +114,7 @@ export class AmqpConnection extends EventEmitter {
     async reconnect(): Promise<void> {
         this.connectionStatus = ConnectionStatus.Reconnecting
         this.logger.info(`Try to reconnect to Rabbit MQ in ${this.reconnectTimeout} ms`)
-        await new Promise((resolve) => {
-            setTimeout(resolve, this.reconnectTimeout)
-        })
+        await setTimeout(this.reconnectTimeout)
         await this.connect()
     }
 

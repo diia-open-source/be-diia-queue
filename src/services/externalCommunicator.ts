@@ -3,9 +3,9 @@ import { randomUUID } from 'node:crypto'
 import Logger from '@diia-inhouse/diia-logger'
 import { ExternalCommunicatorError } from '@diia-inhouse/errors'
 
-import { ExternalEventBusQueue, MessagePayload, PublishDirectOptions, QueueMessageData } from '../interfaces'
-import { ExternalCommunicatorResponse, ReceiveDirectOps } from '../interfaces/externalCommunicator'
-import { EventMessageValidator } from './eventMessageValidator'
+import { ExternalCommunicatorResponse, ReceiveDirectOps } from '../interfaces/externalCommunicator.js'
+import { ExternalEventBusQueue, MessagePayload, PublishDirectOptions, QueueMessageData } from '../interfaces/index.js'
+import { EventMessageValidator } from './eventMessageValidator.js'
 
 export class ExternalCommunicator {
     constructor(
@@ -133,7 +133,7 @@ export class ExternalCommunicator {
                 const errorMsg = 'Message in a wrong format was received from a direct channel'
 
                 this.logger.error(errorMsg, { err, externalResponse })
-                throw new Error(errorMsg)
+                throw new Error(errorMsg, { cause: err })
             }
         }
 

@@ -12,10 +12,10 @@ import {
     MessageBrokerServiceListener,
     QueueName,
     QueueOptions,
-} from '../interfaces'
-import { RabbitMQProvider } from '../providers'
-import * as Utils from '../utils'
-import { EventMessageHandler } from './eventMessageHandler'
+} from '../interfaces/index.js'
+import { RabbitMQProvider } from '../providers/index.js'
+import * as Utils from '../utils.js'
+import { EventMessageHandler } from './eventMessageHandler.js'
 
 export class EventCommunicator {
     constructor(
@@ -71,7 +71,7 @@ export class EventCommunicator {
                     continue
                 }
 
-                const exchangesOptions = this.defineConsumerExchangesOptions(queueName, queueOptions.bindTo, exchangesOptionsMap)
+                const listenerExchangesOptions = this.defineConsumerExchangesOptions(queueName, queueOptions.bindTo, exchangesOptionsMap)
 
                 const eventMessageHandler = this.eventMessageHandler.eventListenerMessageHandler.bind(
                     this.eventMessageHandler,
@@ -80,7 +80,7 @@ export class EventCommunicator {
 
                 const listener: MessageBrokerServiceListener = {
                     queueOptions,
-                    exchangesOptions,
+                    exchangesOptions: listenerExchangesOptions,
                     handler: eventMessageHandler,
                 }
 

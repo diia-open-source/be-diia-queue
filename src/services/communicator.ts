@@ -17,11 +17,11 @@ import {
     QueueMessageData,
     QueueMessageMetaData,
     QueueOptions,
-} from '../interfaces'
-import { EventName, QueueName } from '../interfaces/queueConfig'
-import { RabbitMQProvider } from '../providers/rabbitmq'
-import { getConsumerTag } from '../utils'
-import OptionsBuilder from './optionsBuilder'
+} from '../interfaces/index.js'
+import { EventName, QueueName } from '../interfaces/queueConfig/index.js'
+import { RabbitMQProvider } from '../providers/rabbitmq/index.js'
+import { getConsumerTag } from '../utils.js'
+import OptionsBuilder from './optionsBuilder.js'
 
 export default abstract class Communicator {
     protected readonly optionsBuilder: OptionsBuilder
@@ -64,14 +64,13 @@ export default abstract class Communicator {
     }
 
     async subscribeToQueues(listeners: MessageBrokerServiceEventsListener[]): Promise<void> {
-        for await (const listener of listeners) {
+        for (const listener of listeners) {
             const {
                 eventNames,
                 queueOptions: { name: queueName },
             } = listener
 
             try {
-                // eslint-disable-next-line unicorn/consistent-destructuring
                 await this.subscribe(queueName, listener.handler)
 
                 this.logger.info(
@@ -89,7 +88,7 @@ export default abstract class Communicator {
     }
 
     async unsubscribeFromQueues(queueNames: string[]): Promise<void> {
-        for await (const queueName of queueNames) {
+        for (const queueName of queueNames) {
             await this.unsubscribe(queueName)
         }
     }
@@ -110,7 +109,7 @@ export default abstract class Communicator {
 
         const queueMessageData = this.getPublishQueueMessageData(messageData.event, messageData.payload)
 
-        for await (const bindOptions of bindTo) {
+        for (const bindOptions of bindTo) {
             const { exchangeName, routingKey } = bindOptions
 
             await this.queueProvider.publish(queueMessageData, exchangeName, routingKey, options)
@@ -137,11 +136,7 @@ export default abstract class Communicator {
         return await this.queueProvider.publish(message, exchangeName, routingKey, options)
     }
 
-    async publishEventToExchange(
-        eventName: EventName,
-        payload: MessagePayload | Message,
-        options?: PublishOptions,
-    ): Promise<PublishingResult> {
+    async publishEventToExchange(eventName: EventName, payload: MessagePayload, options?: PublishOptions): Promise<PublishingResult> {
         const exchangeName = this.eventNameToExchangeNameMap.get(eventName)
         if (!exchangeName) {
             const message = `Exchange for event [${eventName}] is not defined`

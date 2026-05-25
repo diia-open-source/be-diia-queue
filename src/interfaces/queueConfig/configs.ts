@@ -1,4 +1,4 @@
-import { ExchangeName, MessageBrokerServicesConfig } from '../messageBrokerServiceConfig'
+import { ExchangeName, MessageBrokerServicesConfig } from '../messageBrokerServiceConfig.js'
 
 export type EventName = string
 

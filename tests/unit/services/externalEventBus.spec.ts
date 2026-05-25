@@ -519,7 +519,6 @@ describe('ExternalEventBus', () => {
                     expect(spiedSubscribe).toHaveBeenCalledTimes(1)
                     expect(spiedSubscribe).toHaveBeenNthCalledWith(1, resQueueOptions.name, expect.any(Function))
 
-                    // eslint-disable-next-line unicorn/no-useless-undefined
                     expect(spiedPublish).toHaveBeenNthCalledWith(1, expectedMsgData, exchangeOptions.name, resQueueName, undefined)
                     expect(spiedPublish).toHaveBeenNthCalledWith(2, expectedMsgData, exchangeOptions.name, reqQueueName, publishOpts2)
                 })
@@ -737,7 +736,7 @@ describe('ExternalEventBus', () => {
                 })
             })
 
-            describe('relative config', async () => {
+            describe('relative config', () => {
                 it('should successfully publish message to queue and publish message to exchange by routing key', async () => {
                     // Arrange
                     queueProvider.getConfig.mockReturnValue(emptyExportConfig)
@@ -778,7 +777,6 @@ describe('ExternalEventBus', () => {
 
                     expect(spiedSubscribe).not.toHaveBeenCalled()
 
-                    // eslint-disable-next-line unicorn/no-useless-undefined
                     expect(spiedPublish).toHaveBeenNthCalledWith(1, expectedMsgData, exchangeOptions.name, resQueueName, undefined)
                     expect(spiedPublish).toHaveBeenNthCalledWith(2, expectedMsgData, exchangeOptions.name, reqQueueName, publishOpts2)
                 })

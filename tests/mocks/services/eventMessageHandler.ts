@@ -17,7 +17,6 @@ export const queueMessage: QueueMessage = {
     properties: {
         appId: randomUUID(),
         clusterId: randomUUID(),
-        // eslint-disable-next-line unicorn/text-encoding-identifier-case
         contentEncoding: 'utf-8',
         contentType: 'application/json',
         correlationId: undefined,

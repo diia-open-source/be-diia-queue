@@ -1,4 +1,4 @@
-import DiiaLogger from '@diia-inhouse/diia-logger'
+import { DiiaLogger } from '@diia-inhouse/diia-logger'
 
 import { ExchangeOptions, MessageHeaders, QueueMessageData, QueueOptions, RabbitMQConfig } from '@src/interfaces'
 import { AmqpAsserter, AmqpConnection, AmqpListener, AmqpPublisher } from '@src/providers'

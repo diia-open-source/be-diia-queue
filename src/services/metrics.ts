@@ -1,8 +1,7 @@
-import { Counter, MetricsService, RequestMechanism, RequestStatus } from '@diia-inhouse/diia-metrics'
-import { TotalRequestsLabelsMap } from '@diia-inhouse/diia-metrics/dist/types/interfaces/metrics'
+import { Counter, MetricsService, RequestMechanism, RequestStatus, TotalRequestsLabelsMap } from '@diia-inhouse/diia-metrics'
 import { ErrorType } from '@diia-inhouse/errors'
 
-import { CommunicationDirection, CommunicationsTotalLabelsMap, Metrics, communicationsTotalLabelsMap } from '../interfaces/metrics'
+import { CommunicationDirection, CommunicationsTotalLabelsMap, Metrics, communicationsTotalLabelsMap } from '../interfaces/metrics/index.js'
 
 export default class RabbitMQMetricsService {
     private readonly communicationsTotalMetric = new Counter<CommunicationsTotalLabelsMap>(

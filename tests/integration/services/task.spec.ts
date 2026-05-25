@@ -3,7 +3,7 @@ import { EventEmitter } from 'node:events'
 
 import { afterAll, expect } from 'vitest'
 
-import DiiaLogger from '@diia-inhouse/diia-logger'
+import { DiiaLogger } from '@diia-inhouse/diia-logger'
 import { LogLevel } from '@diia-inhouse/types'
 import { AppValidator } from '@diia-inhouse/validators'
 
@@ -29,7 +29,6 @@ describe('Delayed task', () => {
     const eventMessageValidator = new EventMessageValidator(validator)
     const eventMessageHandler = new EventMessageHandler(eventMessageValidator, asyncLocalStorage, logger)
     const receivingEvent = 'receiveMessage'
-    // eslint-disable-next-line unicorn/prefer-event-target
     const eventEmitter = new EventEmitter()
 
     const defaultConfig = getConfig({ assertQueues: true, assertExchanges: true })

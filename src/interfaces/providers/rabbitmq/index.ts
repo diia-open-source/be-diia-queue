@@ -1,12 +1,12 @@
 import * as amqp from 'amqplib'
 
-import { ErrorData } from '@diia-inhouse/errors/dist/types/interfaces'
+import { ErrorData } from '@diia-inhouse/errors'
 
-import { AmqpConnection } from '../../../providers/rabbitmq/amqpConnection'
-import { BaseQueueOptions } from '../../messageBrokerServiceConfig'
-import { ListenerOptions } from '../../options'
-import { EventName, QueueConfigByQueueName, ServiceConfigByConfigType, TopicConfigByConfigType } from '../../queueConfig'
-import { ConnectOptions, ConnectionStatus, ReconnectOptions, SocketOptions } from './amqpConnection'
+import { AmqpConnection } from '../../../providers/rabbitmq/amqpConnection.js'
+import { BaseQueueOptions } from '../../messageBrokerServiceConfig.js'
+import { ListenerOptions } from '../../options.js'
+import { EventName, QueueConfigByQueueName, ServiceConfigByConfigType, TopicConfigByConfigType } from '../../queueConfig/index.js'
+import { ConnectOptions, ConnectionStatus, ReconnectOptions, SocketOptions } from './amqpConnection.js'
 
 export interface RabbitMQConfigCustomParams {
     responseRoutingKeyPrefix?: string
@@ -59,9 +59,9 @@ export interface QueueMessageError {
     http_code: number
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// oxlint-disable-next-line typescript/no-explicit-any
 export interface QueueMessageData<T = any> {
-    event: EventName | string
+    event: EventName
     payload: T
     meta: QueueMessageMetaData
 }

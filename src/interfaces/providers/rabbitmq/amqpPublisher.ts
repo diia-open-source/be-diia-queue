@@ -1,6 +1,6 @@
 import { MessagePropertyHeaders } from 'amqplib/properties'
 
-import { Headers } from './index'
+import { Headers } from './index.js'
 
 export type MessagePayload = unknown
 
@@ -19,4 +19,4 @@ export interface DirectResponse<T = unknown> extends MessagePropertyHeaders {
     headers: DirectResponseHeaders
 }
 
-export type PublishingResult = void | never
+export type PublishingResult = void

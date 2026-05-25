@@ -3,9 +3,10 @@
     "compilerOptions": {
         "outDir": "dist",
         "declarationDir": "dist/types",
-        "baseUrl": "./",
-        "strict": true
+        "isolatedDeclarations": true,
+        "strict": true,
+        "rootDir": "./src"
     },
-    "include": ["src/**/*"],
+    "include": ["src/**/*", "tsdown.config.ts"],
     "exclude": ["node_modules"]
 }

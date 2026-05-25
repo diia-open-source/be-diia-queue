@@ -3,7 +3,7 @@ import _ from 'lodash'
 import Logger from '@diia-inhouse/diia-logger'
 import { OnInit } from '@diia-inhouse/types'
 
-import constants from '../constants'
+import constants from '../constants.js'
 import {
     ExchangeName,
     MessageBrokerServiceEventsListener,
@@ -15,11 +15,11 @@ import {
     QueueTypes,
     TaskListener,
     TaskQueue,
-} from '../interfaces'
-import { BindOptions, ConsumerOptions, ExchangeOptions, QueueOptions } from '../interfaces/messageBrokerServiceConfig'
-import { RabbitMQProvider } from '../providers/rabbitmq'
-import Communicator from './communicator'
-import { EventMessageHandler } from './eventMessageHandler'
+} from '../interfaces/index.js'
+import { BindOptions, ConsumerOptions, ExchangeOptions, QueueOptions } from '../interfaces/messageBrokerServiceConfig.js'
+import { RabbitMQProvider } from '../providers/rabbitmq/index.js'
+import Communicator from './communicator.js'
+import { EventMessageHandler } from './eventMessageHandler.js'
 
 export class Task extends Communicator implements TaskQueue, OnInit {
     private queueNamePrefix = 'TasksQueue'
@@ -53,7 +53,7 @@ export class Task extends Communicator implements TaskQueue, OnInit {
                 queueNames.push(queueName)
             }
 
-            const exchangesOptions: ExchangeOptions[] = []
+            const taskExchangesOptions: ExchangeOptions[] = []
 
             for (const queueName of queueNames) {
                 const queueOptions = queuesOptionsMap[queueName]
@@ -66,10 +66,10 @@ export class Task extends Communicator implements TaskQueue, OnInit {
 
                 const options = this.defineExchangesOptions(queueName, isDelayed, bindTo, exchangesOptionsMap)
 
-                exchangesOptions.push(...options)
+                taskExchangesOptions.push(...options)
             }
 
-            this.taskNameExchangesOptionsMap.set(taskName, exchangesOptions)
+            this.taskNameExchangesOptionsMap.set(taskName, taskExchangesOptions)
         }
     }
 
@@ -79,7 +79,7 @@ export class Task extends Communicator implements TaskQueue, OnInit {
             throw new Error(`Not found task [${taskName}] exchanges options`)
         }
 
-        for await (const exchangeOptions of exchangesOptions) {
+        for (const exchangeOptions of exchangesOptions) {
             const { name: exchangeName, delayed } = exchangeOptions
 
             if (delay && !delayed) {
@@ -130,14 +130,14 @@ export class Task extends Communicator implements TaskQueue, OnInit {
                     continue
                 }
 
-                const exchangesOptions = this.defineExchangesOptions(queueName, isDelayed, queueOptions.bindTo, exchangesOptionsMap)
+                const listenerExchangesOptions = this.defineExchangesOptions(queueName, isDelayed, queueOptions.bindTo, exchangesOptionsMap)
 
                 const handler: MessageHandler = this.eventMessageHandler.eventListenerMessageHandler.bind(this.eventMessageHandler, task)
 
                 const listener: MessageBrokerServiceListener = {
                     handler,
                     queueOptions,
-                    exchangesOptions,
+                    exchangesOptions: listenerExchangesOptions,
                 }
 
                 listeners.push(listener)

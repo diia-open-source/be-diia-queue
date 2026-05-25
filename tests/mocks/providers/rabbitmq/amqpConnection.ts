@@ -28,7 +28,6 @@ export const amqpConnection = {
     connect: vi.fn(),
 }
 
-// eslint-disable-next-line unicorn/prefer-event-target
 export class AmqpConnectionMock extends EventEmitter {
     async connect(): Promise<unknown> {
         return amqpConnection.connect
@@ -54,7 +53,6 @@ export const channelMock = {
 
 export const sendMessageMock = vi.fn()
 
-// eslint-disable-next-line unicorn/prefer-event-target
 export class ChannelMock extends EventEmitter {
     async assertExchange(...args: unknown[]): Promise<unknown> {
         return channelMock.assertExchange(...args)

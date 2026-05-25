@@ -1,7 +1,7 @@
-import constants from '../constants'
-import { BindOptions, ConsumerOptions, ExchangeName, QueueOptions, QueueTypes } from '../interfaces/messageBrokerServiceConfig'
-import { QueueName } from '../interfaces/queueConfig'
-import { RabbitMQProvider } from '../providers/rabbitmq'
+import constants from '../constants.js'
+import { BindOptions, ConsumerOptions, ExchangeName, QueueOptions, QueueTypes } from '../interfaces/messageBrokerServiceConfig.js'
+import { QueueName } from '../interfaces/queueConfig/index.js'
+import { RabbitMQProvider } from '../providers/rabbitmq/index.js'
 
 export default class OptionsBuilder {
     constructor(private readonly queueProvider: RabbitMQProvider) {}

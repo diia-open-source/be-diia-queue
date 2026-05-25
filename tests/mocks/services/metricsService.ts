@@ -1,7 +1,7 @@
 import _ from 'lodash'
 import { mock } from 'vitest-mock-extended'
 
-import DiiaLogger from '@diia-inhouse/diia-logger'
+import { DiiaLogger } from '@diia-inhouse/diia-logger'
 import { MetricsConfig, MetricsService } from '@diia-inhouse/diia-metrics'
 
 import RabbitMQMetricsService from '@services/metrics'

@@ -1,6 +1,6 @@
 import { Options } from 'amqplib'
 
-import { RecreateChannelOptions } from './messageBrokerServiceConfig'
+import { RecreateChannelOptions } from './messageBrokerServiceConfig.js'
 
 export interface PublisherOptions {
     timeout?: number

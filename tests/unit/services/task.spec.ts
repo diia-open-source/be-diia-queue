@@ -89,7 +89,7 @@ describe('Task', () => {
             expect(spiedSubscribe).not.toHaveBeenCalled()
         })
 
-        describe('global config', async () => {
+        describe('global config', () => {
             it('should successfully initialize', async () => {
                 // Arrange
                 const spiedInit = queueProvider.init.mockResolvedValue()
@@ -218,7 +218,7 @@ describe('Task', () => {
             })
         })
 
-        describe('relative config', async () => {
+        describe('relative config', () => {
             it('should successfully initialize', async () => {
                 // Arrange
                 const spiedInit = queueProvider.init.mockResolvedValue()
@@ -249,7 +249,7 @@ describe('Task', () => {
             })
         })
 
-        describe('mix config', async () => {
+        describe('mix config', () => {
             it('should successfully initialize', async () => {
                 // Arrange
                 const spiedInit = queueProvider.init.mockResolvedValue()
@@ -284,7 +284,7 @@ describe('Task', () => {
         })
     })
     describe('method: `publish`', () => {
-        describe('global config', async () => {
+        describe('global config', () => {
             it('should successfully publish message', async () => {
                 // Arrange
                 queueProvider.getConfig.mockReturnValue(emptyExportConfig)
@@ -329,7 +329,7 @@ describe('Task', () => {
             })
         })
 
-        describe('relative config', async () => {
+        describe('relative config', () => {
             it('should successfully publish message', async () => {
                 // Arrange
                 queueProvider.getConfig.mockReturnValue(emptyExportConfig)

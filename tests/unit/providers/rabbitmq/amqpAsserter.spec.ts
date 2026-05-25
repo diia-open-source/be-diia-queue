@@ -1,3 +1,5 @@
+import { setTimeout } from 'node:timers/promises'
+
 import { Channel, Replies } from 'amqplib'
 import { describe } from 'vitest'
 import { mock } from 'vitest-mock-extended'
@@ -49,10 +51,7 @@ describe('AmqpAsserter', () => {
             await amqpAsserter.init()
 
             amqpConnection.emit('ready')
-            await new Promise((resolve) => {
-                // do not complete test case until ready event is handled
-                setTimeout(resolve, 0)
-            })
+            await setTimeout()
 
             expect(connectionMock.createChannel).toHaveBeenCalledWith()
         })

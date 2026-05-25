@@ -1,9 +1,9 @@
-export * from './rabbitmq'
+export * from './rabbitmq/index.js'
 
-export * from './rabbitmq/amqpListener'
+export * from './rabbitmq/amqpListener.js'
 
-export * from './rabbitmq/amqpAsserter'
+export * from './rabbitmq/amqpAsserter.js'
 
-export * from './rabbitmq/amqpPublisher'
+export * from './rabbitmq/amqpPublisher.js'
 
-export * from './rabbitmq/amqpConnection'
+export * from './rabbitmq/amqpConnection.js'

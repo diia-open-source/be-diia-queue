@@ -1,5 +1,5 @@
-/* eslint-disable unicorn/prefer-event-target */
 import { EventEmitter } from 'node:events'
+import { setTimeout } from 'node:timers/promises'
 
 import { Channel, Options } from 'amqplib'
 import { Replies } from 'amqplib/properties'
@@ -80,7 +80,7 @@ class Connection extends EventEmitter {
     }
 }
 
-describe(`${AmqpListener.name}`, () => {
+describe('AmqpListener', () => {
     const metricsService = makeMockRabbitMQMetricsService()
 
     const defaultQueueName = 'queueName'
@@ -105,10 +105,7 @@ describe(`${AmqpListener.name}`, () => {
             await amqpListener.listenQueue(defaultQueueName, async () => {})
             await amqpListener.init()
             amqpConnection.emit('ready')
-            await new Promise((resolve) => {
-                // do not complete test case until ready event is handled
-                setTimeout(resolve, 0)
-            })
+            await setTimeout()
 
             expect(channelMock.prefetch).toHaveBeenCalledWith(1)
         })
@@ -313,7 +310,9 @@ describe(`${AmqpListener.name}`, () => {
             await amqpListener.listenQueue(defaultQueueName, callback)
 
             // Assert
-            expect(error.toString()).toEqual(`Error: Max recreate channel tries reached [${maxTries}] for queue [${queueOptions.name}]`)
+            expect(String(error as Error)).toEqual(
+                `Error: Max recreate channel tries reached [${maxTries}] for queue [${queueOptions.name}]`,
+            )
         })
     })
 })

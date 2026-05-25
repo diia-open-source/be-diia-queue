@@ -1,3 +1,5 @@
+import { setTimeout } from 'node:timers/promises'
+
 import { expect } from 'vitest'
 
 import Logger from '@diia-inhouse/diia-logger'
@@ -15,12 +17,10 @@ import { makeMockMetricsService } from '@mocks/services/metricsService'
 
 import AmqpHelper from '@tests/utils/amqpHelper'
 
-describe(`${AmqpPublisher.name}`, async () => {
+describe('AmqpPublisher', () => {
     const connectionConfig = getRabbitMQConfig({ assertQueues: true, assertExchanges: true })
 
     const amqpHelper = new AmqpHelper(connectionConfig)
-
-    await amqpHelper.init()
 
     const logger = new Logger()
 
@@ -31,7 +31,10 @@ describe(`${AmqpPublisher.name}`, async () => {
         connectionConfig.socketOptions,
     )
 
-    await defaultAmqpConnection.connect()
+    beforeAll(async () => {
+        await amqpHelper.init()
+        await defaultAmqpConnection.connect()
+    })
 
     const metrics = makeMockMetricsService()
 
@@ -41,7 +44,7 @@ describe(`${AmqpPublisher.name}`, async () => {
 
     const asserter = new AmqpAsserter(defaultAmqpConnection, logger)
 
-    describe(`method ${AmqpPublisher.prototype.publishToExchangeDirect.name}`, async () => {
+    describe(`method ${AmqpPublisher.prototype.publishToExchangeDirect.name}`, () => {
         it('should successfully publish message to exchange if channel is broken', async (context) => {
             // Arrange
             const publisher = new AmqpPublisher(defaultAmqpConnection, logger, rabbitmqMetricsService, systemServiceName, {
@@ -90,7 +93,7 @@ describe(`${AmqpPublisher.name}`, async () => {
 
             const publishToNotExistExchangePromise = publisher.publishToExchangeDirect(notExistExchangeName, message, headers, routingKey)
 
-            await new Promise((resolve) => setTimeout(resolve, 500))
+            await setTimeout(500)
 
             const publishToExistExchangePromise = publisher.publishToExchangeDirect(exchangeName, message, headers, routingKey)
 

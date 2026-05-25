@@ -1,11 +1,11 @@
-import { EventBus } from '../services/eventBus'
-import { EventMessageHandler } from '../services/eventMessageHandler'
-import { EventMessageValidator } from '../services/eventMessageValidator'
-import { ExternalCommunicator } from '../services/externalCommunicator'
-import { ExternalEventBus } from '../services/externalEventBus'
-import { Queue } from '../services/queue'
-import { ScheduledTask } from '../services/scheduledTask'
-import { Task } from '../services/task'
+import { EventBus } from '../services/eventBus.js'
+import { EventMessageHandler } from '../services/eventMessageHandler.js'
+import { EventMessageValidator } from '../services/eventMessageValidator.js'
+import { ExternalCommunicator } from '../services/externalCommunicator.js'
+import { ExternalEventBus } from '../services/externalEventBus.js'
+import { Queue } from '../services/queue.js'
+import { ScheduledTask } from '../services/scheduledTask.js'
+import { Task } from '../services/task.js'
 
 export type CommonQueueDeps = {
     queue: Queue

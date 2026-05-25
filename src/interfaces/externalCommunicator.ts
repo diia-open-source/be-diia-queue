@@ -1,7 +1,7 @@
 import { HttpStatusCode } from '@diia-inhouse/types'
 import { ValidationSchema } from '@diia-inhouse/validators'
 
-import { ExchangeName } from './messageBrokerServiceConfig'
+import { ExchangeName } from './messageBrokerServiceConfig.js'
 
 /**
  * Options for {@link ExternalCommunicator.receiveDirect}.

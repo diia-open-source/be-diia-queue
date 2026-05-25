@@ -9,7 +9,7 @@ export class TestEventBusListener implements EventBusListener {
         public event = TestEventBusListenerName,
     ) {}
 
-    async handler(): Promise<unknown | void> {
+    async handler(): Promise<unknown> {
         return
     }
 }
