@@ -1,6 +1,6 @@
 {
     "name": "@diia-inhouse/diia-queue",
-    "version": "14.0.12",
+    "version": "14.0.13",
     "type": "module",
     "description": "Package provide queue functionality",
     "main": "dist/index.js",
@@ -52,9 +52,9 @@
     },
     "devDependencies": {
         "@diia-inhouse/configs": "7.0.0",
-        "@diia-inhouse/diia-logger": "4.2.4",
-        "@diia-inhouse/diia-metrics": "7.1.5",
-        "@diia-inhouse/env": "3.3.1",
+        "@diia-inhouse/diia-logger": "4.3.0",
+        "@diia-inhouse/diia-metrics": "7.1.6",
+        "@diia-inhouse/env": "3.3.2",
         "@diia-inhouse/errors": "2.1.1",
         "@diia-inhouse/oxc-config": "1.10.0",
         "@diia-inhouse/test": "8.2.1",
