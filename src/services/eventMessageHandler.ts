@@ -1,7 +1,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
 import { randomBytes } from 'node:crypto'
 
-import { isValidTraceId, trace } from '@opentelemetry/api'
+import { context as otelContext, isValidTraceId, propagation, trace } from '@opentelemetry/api'
 
 import Logger from '@diia-inhouse/diia-logger'
 import { ApiError, ValidationError } from '@diia-inhouse/errors'
@@ -180,10 +180,11 @@ export class EventMessageHandler {
         }
     }
 
-    // Prefer the W3C traceparent on the message — trace.getActiveSpan() misses it
+    // Prefer the trace context propagated on the message — trace.getActiveSpan() misses it
     // when the inbound span isn't active in this handler's scope.
     private resolveTraceId(properties: MessageProperties): string {
-        const extractedTraceId = this.extractTraceparentTraceId(properties.headers?.traceparent)
+        const carrier = this.toPropagationCarrier(properties.headers)
+        const extractedTraceId = trace.getSpan(propagation.extract(otelContext.active(), carrier))?.spanContext().traceId ?? ''
         if (isValidTraceId(extractedTraceId)) {
             return extractedTraceId
         }
@@ -196,18 +197,16 @@ export class EventMessageHandler {
         return properties.headers?.traceId || randomBytes(16).toString('hex')
     }
 
-    // Parses W3C Trace Context "traceparent" directly (format: "<version>-<trace_id>-<span_id>-<flags>").
-    private extractTraceparentTraceId(raw: string | Buffer | undefined | null): string {
-        if (raw === undefined || raw === null) {
-            return ''
+    private toPropagationCarrier(headers: MessageProperties['headers']): Record<string, string> {
+        const carrier: Record<string, string> = {}
+        for (const [key, value] of Object.entries(headers ?? {})) {
+            if (value === undefined || value === null) {
+                continue
+            }
+
+            carrier[key] = Buffer.isBuffer(value) ? value.toString('utf8') : String(value)
         }
 
-        const tp = Buffer.isBuffer(raw) ? raw.toString('utf8') : raw
-        const [version, traceId] = tp.split('-')
-        if (version !== '00' || !traceId) {
-            return ''
-        }
-
-        return isValidTraceId(traceId) ? traceId : ''
+        return carrier
     }
 }
