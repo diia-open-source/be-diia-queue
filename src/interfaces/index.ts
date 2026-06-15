@@ -1,10 +1,10 @@
 import { ValidationError } from '@diia-inhouse/errors'
 import { ValidationSchema } from '@diia-inhouse/validators'
 
+import { MessagePayload, PublishingResult } from '../providers/rabbitmq/amqpPublisher.types.js'
 import { ExchangeName, ExchangeOptions, QueueOptions } from './messageBrokerServiceConfig.js'
 import { MessageHandler } from './messageHandler.js'
-import { PublishDirectOptions, PublishExternalEventOptions, PublishOptions, SubscribeOptions } from './options.js'
-import { MessagePayload, PublishingResult } from './providers/rabbitmq/amqpPublisher.js'
+import { PublishDirectOptions, PublishOptions, SubscribeOptions } from './options.js'
 import { MessageData, NackOptions, QueueMessageMetaData, RabbitMQConfig } from './providers/rabbitmq/index.js'
 import { EventName, QueueName, ServiceRulesConfig } from './queueConfig/index.js'
 import { QueueConnectionType } from './queueStatus.js'
@@ -13,15 +13,13 @@ export * from './providers/rabbitmq/index.js'
 
 export * from './providers/rabbitmq/amqpConnection.js'
 
-export * from './providers/rabbitmq/amqpPublisher.js'
+export * from '../providers/rabbitmq/amqpPublisher.types.js'
 
 export * from './queueStatus.js'
 
 export * from './options.js'
 
 export * from './messageHandler.js'
-
-export * from './options.js'
 
 export * from './queueContext.js'
 
@@ -76,7 +74,7 @@ export interface ExternalEventBusQueue {
      * - use the publishToExchange method for pushing a message by a routing key
      * - use the publishToQueue method for pushing a message to a queue
      * */
-    publish(eventName: EventName, message: MessagePayload, options?: PublishExternalEventOptions): Promise<PublishingResult>
+    publish(eventName: EventName, message: MessagePayload, options?: PublishOptions): Promise<PublishingResult>
 
     publishDirect<T>(eventName: string, message: MessagePayload, options?: PublishDirectOptions): Promise<T>
 

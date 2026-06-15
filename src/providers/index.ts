@@ -6,4 +6,6 @@ export * from './rabbitmq/amqpAsserter.js'
 
 export * from './rabbitmq/amqpPublisher.js'
 
+export * from './rabbitmq/amqpPublisher.types.js'
+
 export * from './rabbitmq/amqpConnection.js'

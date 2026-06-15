@@ -1,11 +1,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
-import { setTimeout } from 'node:timers/promises'
 
 import { Channel } from 'amqplib'
-import { TimeoutError } from 'p-timeout'
 import { mock } from 'vitest-mock-extended'
-
-import { InternalServerError } from '@diia-inhouse/errors'
 
 import { RabbitMQProvider } from '@src/providers/rabbitmq'
 import { AmqpAsserter } from '@src/providers/rabbitmq/amqpAsserter'
@@ -19,7 +15,7 @@ import { getExpectedMsgData } from '@mocks/providers/rabbitmq/amqpPublisher'
 import { makeMockMetricsService } from '@tests/mocks/services/metricsService'
 import { logger } from '@tests/unit/mocks'
 
-import { ConnectionStatus, MessageHeaders, PublishExternalEventOptions, QueueContext } from '@interfaces/index'
+import { ConnectionStatus, MessageHeaders, PublishOptions, QueueContext } from '@interfaces/index'
 import { EventName, ServiceConfigByConfigType, TopicConfigByConfigType } from '@interfaces/queueConfig'
 
 const messageHandler = async (): Promise<void> => {}
@@ -74,6 +70,26 @@ describe('RabbitMQProvider', () => {
             await rabbitMQProvider.init()
         })
 
+        it('should pass default publish options to publisher when options omitted', async () => {
+            // Arrange
+            const spiedPublishToExchangeDirect = amqpPublisher.publishToExchangeDirect.mockResolvedValueOnce(true)
+
+            const exchangeName = 'TopicExternalDirectRPC'
+            const routingKey = `queue.diia.${defaultEventName}.req`
+
+            const messageData = getExpectedMsgData(defaultEventName, {})
+
+            // Act
+            const result = await rabbitMQProvider.publishExternalDirect(messageData, exchangeName, routingKey)
+
+            // Assert
+            expect(result).toBe(true)
+
+            expect(spiedPublishToExchangeDirect).toHaveBeenCalledWith(exchangeName, messageData, expectedMessageHeaders, routingKey, {
+                publishTimeout: 10_000,
+            })
+        })
+
         it('should call publishToExchangeDirect', async () => {
             // Arrange
             const spiedPublishToExchangeDirect = amqpPublisher.publishToExchangeDirect.mockResolvedValueOnce(true)
@@ -84,18 +100,16 @@ describe('RabbitMQProvider', () => {
             const messageData = getExpectedMsgData(defaultEventName, {})
 
             // Act
-            const result = await rabbitMQProvider.publishExternalDirect(messageData, exchangeName, routingKey, {})
+            const result = await rabbitMQProvider.publishExternalDirect(messageData, exchangeName, routingKey, {
+                publishTimeout: 10_000,
+            })
 
             // Assert
             expect(result).toBe(true)
 
-            expect(spiedPublishToExchangeDirect).toHaveBeenCalledWith(
-                exchangeName,
-                messageData,
-                expectedMessageHeaders,
-                routingKey,
-                undefined,
-            )
+            expect(spiedPublishToExchangeDirect).toHaveBeenCalledWith(exchangeName, messageData, expectedMessageHeaders, routingKey, {
+                publishTimeout: 10_000,
+            })
         })
     })
 
@@ -127,62 +141,60 @@ describe('RabbitMQProvider', () => {
         const defaultResponseRoutingKey = `diia.queue.diia.${defaultEventName}.res`
         const defaultMessage = getExpectedMsgData(defaultEventName, {}, { responseRoutingKey: defaultResponseRoutingKey })
 
-        it('should throw error when timeout param passed and timeout exceed', async () => {
+        it('should pass default publish options to publisher when options omitted', async () => {
             // Arrange
-            const publishTimeout = 100
-
-            const spiedPublishToExchange = amqpPublisher.publishToExchange.mockImplementationOnce(async () => {
-                await setTimeout(publishTimeout * 2)
-            })
-
-            const options: PublishExternalEventOptions = { publishTimeout }
+            amqpPublisher.publishToExchange.mockResolvedValueOnce(undefined)
 
             // Act
-            const publishingPromise = rabbitMQProvider.publish(defaultMessage, defaultTopicName, defaultReqRoutingKey, options)
+            await rabbitMQProvider.publish(defaultMessage, defaultTopicName, defaultReqRoutingKey)
 
             // Assert
-            await expect(publishingPromise).rejects.toThrow(TimeoutError)
-            expect(spiedPublishToExchange).toHaveBeenCalledWith(
-                defaultTopicName,
-                defaultMessage,
-                expectedMessageHeaders,
-                defaultReqRoutingKey,
-            )
             expect(amqpPublisher.publishToExchange).toHaveBeenCalledWith(
                 defaultTopicName,
                 defaultMessage,
                 expectedMessageHeaders,
                 defaultReqRoutingKey,
+                { publishTimeout: 10_000, throwOnPublishTimeout: true },
             )
         })
 
-        it('should return false when timeout with throw false params passed and timeout exceed', async () => {
+        it('should pass publish options to publisher', async () => {
             // Arrange
             const publishTimeout = 100
+            const options: PublishOptions = { publishTimeout, throwOnPublishTimeout: true }
 
-            const spiedPublishToExchange = amqpPublisher.publishToExchange.mockImplementationOnce(async () => {
-                await setTimeout(publishTimeout * 2)
-            })
-
-            const options: PublishExternalEventOptions = { publishTimeout, throwOnPublishTimeout: false }
+            amqpPublisher.publishToExchange.mockResolvedValueOnce(undefined)
 
             // Act
-            const publishingPromise = rabbitMQProvider.publish(defaultMessage, defaultTopicName, defaultReqRoutingKey, options)
+            await rabbitMQProvider.publish(defaultMessage, defaultTopicName, defaultReqRoutingKey, options)
 
             // Assert
-            await expect(publishingPromise).rejects.toThrow(InternalServerError)
-
-            expect(spiedPublishToExchange).toHaveBeenCalledWith(
-                defaultTopicName,
-                defaultMessage,
-                expectedMessageHeaders,
-                defaultReqRoutingKey,
-            )
             expect(amqpPublisher.publishToExchange).toHaveBeenCalledWith(
                 defaultTopicName,
                 defaultMessage,
                 expectedMessageHeaders,
                 defaultReqRoutingKey,
+                { publishTimeout, throwOnPublishTimeout: true },
+            )
+        })
+
+        it('should pass throwOnPublishTimeout false to publisher', async () => {
+            // Arrange
+            const publishTimeout = 100
+            const options: PublishOptions = { publishTimeout, throwOnPublishTimeout: false }
+
+            amqpPublisher.publishToExchange.mockResolvedValueOnce(undefined)
+
+            // Act
+            await rabbitMQProvider.publish(defaultMessage, defaultTopicName, defaultReqRoutingKey, options)
+
+            // Assert
+            expect(amqpPublisher.publishToExchange).toHaveBeenCalledWith(
+                defaultTopicName,
+                defaultMessage,
+                expectedMessageHeaders,
+                defaultReqRoutingKey,
+                { publishTimeout, throwOnPublishTimeout: false },
             )
         })
     })

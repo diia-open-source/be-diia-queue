@@ -68,7 +68,7 @@ export class ChannelMock extends EventEmitter {
         return channelMock.prefetch(...args)
     }
 
-    async publish(...args: unknown[]): Promise<unknown> {
+    publish(...args: unknown[]): unknown {
         return channelMock.publish(...args)
     }
 

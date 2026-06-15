@@ -9,12 +9,12 @@ import { HttpStatusCode, Logger } from '@diia-inhouse/types'
 import constants from '../../constants.js'
 import { ExchangeName } from '../../interfaces/messageBrokerServiceConfig.js'
 import { LabelUnknown } from '../../interfaces/metrics/index.js'
-import { PublisherOptions } from '../../interfaces/options.js'
+import { PublishDirectMessageOptions, PublisherOptions, PublishMessageOptions } from '../../interfaces/options.js'
 import { ConnectionStatus } from '../../interfaces/providers/rabbitmq/amqpConnection.js'
-import { DirectResponse, MessageHeaders, PublishingResult } from '../../interfaces/providers/rabbitmq/amqpPublisher.js'
 import { Headers, QueueMessageData } from '../../interfaces/providers/rabbitmq/index.js'
 import RabbitMQMetricsService from '../../services/metrics.js'
 import { AmqpConnection } from './amqpConnection.js'
+import { AmqpPublisherPublishOptions, DirectResponse, MessageHeaders, PublishingResult } from './amqpPublisher.types.js'
 
 const { APP_ID, DEFAULT_ROUTING_KEY, REPLY_TO_QUEUE_NAME } = constants
 
@@ -41,7 +41,11 @@ export class AmqpPublisher {
 
     private eventEmitter?: EventEmitter
 
-    private readonly directResponseTimeout: number = 10000
+    private readonly directResponseTimeout: number = 10_000
+
+    private readonly publishTimeout: number = 10_000
+
+    private readonly throwOnPublishTimeout = true
 
     constructor(
         private readonly connection: AmqpConnection,
@@ -50,8 +54,9 @@ export class AmqpPublisher {
         private readonly systemServiceName: string,
         options: PublisherOptions = {},
     ) {
-        this.directResponseTimeout = options.timeout || this.directResponseTimeout
-        this.replyToQueueName = options.replyToQueueName || REPLY_TO_QUEUE_NAME
+        this.publishTimeout = options.publishTimeout ?? this.publishTimeout
+        this.directResponseTimeout = options.directResponseTimeout ?? options.timeout ?? this.directResponseTimeout
+        this.replyToQueueName = options.replyToQueueName ?? REPLY_TO_QUEUE_NAME
     }
 
     async init(): Promise<void> {
@@ -70,6 +75,7 @@ export class AmqpPublisher {
         message: QueueMessageData,
         headers: MessageHeaders,
         routingKey: string = DEFAULT_ROUTING_KEY,
+        publishMessageOptions: PublishMessageOptions = {},
     ): Promise<PublishingResult> {
         const { event, payload } = message
 
@@ -87,13 +93,14 @@ export class AmqpPublisher {
                 throw new InternalServerError(errorMessage)
             }
 
-            const publishOptions = this.getPublishOptions(headers)
+            const amqpPublisherPublishOptions = this.getAmqpPublisherPublishOptions(publishMessageOptions, headers)
 
             this.logger.info(`Publish event: ${event}`, { routingKey, delay: headers['x-delay'] })
             this.logger.io('Event message', message)
 
-            this.publishMessage(message, exchangeName, routingKey, publishOptions)
-            this.collectMetrics(startTime, route, source, destination)
+            const isPublished = await this.publishMessage(message, exchangeName, routingKey, amqpPublisherPublishOptions)
+
+            this.collectMetrics(startTime, route, source, destination, isPublished ? undefined : ErrorType.Unoperated)
         } catch (err) {
             this.logger.error('Error while publishing event', { err, exchangeName, routingKey })
 
@@ -108,7 +115,7 @@ export class AmqpPublisher {
         message: QueueMessageData,
         headers: MessageHeaders,
         routingKey: string = DEFAULT_ROUTING_KEY,
-        responseTimeoutMs: number = this.directResponseTimeout,
+        publishDirectOptions: PublishDirectMessageOptions = {},
     ): Promise<T> {
         const startTime = process.hrtime.bigint()
 
@@ -122,9 +129,9 @@ export class AmqpPublisher {
             const {
                 body,
                 headers: { [Headers.handledBy]: handledBy },
-            } = await this.receiveDirectResponse<T>(exchangeName, message, headers, routingKey, responseTimeoutMs)
+            } = await this.receiveDirectResponse<T>(exchangeName, message, headers, routingKey, publishDirectOptions)
 
-            destination = handledBy || destination
+            destination = handledBy ?? destination
 
             return body
         } catch (err) {
@@ -167,60 +174,141 @@ export class AmqpPublisher {
 
         const body = JSON.parse(msg.content.toString('utf8'))
         const headers = msg.properties.headers || {}
+        const response: DirectResponse = { body, headers }
 
-        this.eventEmitter?.emit<DirectResponse>(msg.properties.correlationId, { body, headers })
+        this.eventEmitter?.emit(msg.properties.correlationId, response)
     }
 
-    private publishMessage(
+    private async publishMessage(
         eventMessage: QueueMessageData,
         exchangeName: string,
         routingKey: string,
-        publishOptions: Options.Publish,
-    ): PublishingResult {
+        amqpPublisherPublishOptions: AmqpPublisherPublishOptions,
+    ): Promise<boolean> {
         if (!this.regularChannel) {
             throw new Error('Publishing message is denied, channel is not initialized')
         }
 
-        return this.publish(eventMessage, exchangeName, routingKey, publishOptions, this.regularChannel)
+        return await this.publish(eventMessage, exchangeName, routingKey, amqpPublisherPublishOptions, this.regularChannel)
     }
 
-    private publishRequest(
+    private async publishRequest(
         eventMessage: QueueMessageData,
         exchangeName: string,
         routingKey: string,
-        publishOptions: Options.Publish,
-    ): PublishingResult {
+        amqpPublisherPublishOptions: AmqpPublisherPublishOptions,
+    ): Promise<PublishingResult> {
         if (!this.rpcChannel) {
             throw new Error('Publishing RPC request is denied, channel is not initialized')
         }
 
-        return this.publish(eventMessage, exchangeName, routingKey, publishOptions, this.rpcChannel)
+        await this.publish(eventMessage, exchangeName, routingKey, amqpPublisherPublishOptions, this.rpcChannel)
     }
 
-    private publish(
+    private async publish(
         eventMessage: QueueMessageData,
         exchangeName: string,
         routingKey: string,
-        publishOptions: Options.Publish,
+        publishOptions: AmqpPublisherPublishOptions,
         channel: Channel,
-    ): PublishingResult {
-        const data = JSON.stringify(eventMessage)
-        const content = Buffer.from(data)
+    ): Promise<boolean> {
+        const { channel: channelPublishOptions, custom: customPublishOptions } = publishOptions
 
-        const isPublishingSuccessful = channel.publish(exchangeName, routingKey, content, publishOptions)
-        if (!isPublishingSuccessful) {
-            throw new InternalServerError('Message has not been published')
+        const content = Buffer.from(JSON.stringify(eventMessage))
+        const published = channel.publish(exchangeName, routingKey, content, channelPublishOptions)
+
+        if (published) {
+            return true
+        }
+
+        const backpressureStartTime = process.hrtime.bigint()
+
+        const logParams = {
+            routingKey,
+            exchangeName,
+            event: eventMessage.event,
+        }
+
+        try {
+            const hasMessagePublished = await this.waitForDrain(channel, customPublishOptions)
+
+            const waitTimeMs = this.getWaitingTimeMs(backpressureStartTime)
+
+            if (hasMessagePublished) {
+                this.logger.info('Message published after backpressure', { ...logParams, waitTimeMs })
+            } else {
+                this.logger.error('Message publish timeout exceeded', { ...logParams, waitTimeMs })
+            }
+
+            return hasMessagePublished
+        } catch (err) {
+            const waitTimeMs = this.getWaitingTimeMs(backpressureStartTime)
+
+            this.logger.error('Error while waiting for drain', { err, ...logParams, waitTimeMs })
+
+            throw err
         }
     }
 
-    private getPublishOptions(headers?: object, extraOpts: Options.Publish = {}): Options.Publish {
+    private async waitForDrain(channel: Channel, publishMessageOptions: PublishMessageOptions): Promise<boolean> {
+        const { publishTimeout = this.publishTimeout, throwOnPublishTimeout = this.throwOnPublishTimeout } = publishMessageOptions
+
+        const { promise, resolve, reject } = Promise.withResolvers<boolean>()
+        let timeoutId: NodeJS.Timeout
+
+        const cleanup = (): void => {
+            channel.off('drain', onDrain)
+            channel.off('error', onError)
+            clearTimeout(timeoutId)
+        }
+
+        const onDrain = (): void => {
+            resolve(true)
+        }
+
+        const onError = (err: Error): void => {
+            reject(err)
+        }
+
+        channel.once('drain', onDrain)
+        channel.once('error', onError)
+
+        timeoutId = setTimeout(() => {
+            if (throwOnPublishTimeout) {
+                reject(new InternalServerError('Message publish timeout exceeded'))
+            } else {
+                resolve(false)
+            }
+        }, publishTimeout)
+
+        try {
+            return await promise
+        } finally {
+            cleanup()
+        }
+    }
+
+    private getWaitingTimeMs(backpressureStartTime: bigint): number {
+        return Number(process.hrtime.bigint() - backpressureStartTime) / 1_000_000
+    }
+
+    private getAmqpPublisherPublishOptions(
+        customOptions: PublishMessageOptions,
+        headers?: object,
+        amqpOptions: Options.Publish = {},
+    ): AmqpPublisherPublishOptions {
         return {
-            ...this.defaultPublishOptions,
-            timestamp: Date.now(), // a timestamp for the message
-            ...extraOpts,
-            headers: {
-                ...headers,
-                [Headers.sentFrom]: this.systemServiceName,
+            channel: {
+                ...this.defaultPublishOptions,
+                timestamp: Date.now(), // a timestamp for the message
+                ...amqpOptions,
+                headers: {
+                    ...headers,
+                    [Headers.sentFrom]: this.systemServiceName,
+                },
+            },
+            custom: {
+                ...customOptions,
             },
         }
     }
@@ -230,7 +318,7 @@ export class AmqpPublisher {
         message: QueueMessageData,
         headers: MessageHeaders,
         routingKey: string = DEFAULT_ROUTING_KEY,
-        responseTimeoutMs: number = this.directResponseTimeout,
+        publishDirectOptions: PublishDirectMessageOptions,
     ): Promise<DirectResponse<T>> {
         const { event, payload } = message
 
@@ -240,33 +328,48 @@ export class AmqpPublisher {
 
         const correlationId = randomUUID()
 
-        const publishOptions = this.getPublishOptions(headers, {
+        const publishMessageOptions: PublishMessageOptions = {
+            ...publishDirectOptions,
+            throwOnPublishTimeout: true,
+        }
+        const amqpPublishOptions: Options.Publish = {
             correlationId,
             replyTo: this.replyToQueueName,
-        })
+        }
+        const amqpPublisherPublishOptions = this.getAmqpPublisherPublishOptions(publishMessageOptions, headers, amqpPublishOptions)
 
         this.logger.info(`Publish direct event: ${event}`, { routingKey, correlationId, eventUuid: payload.uuid })
         this.logger.io('Direct event message', message)
 
-        return await new Promise((resolve, reject) => {
-            const timeout = setTimeout(() => {
-                this.eventEmitter?.removeAllListeners(correlationId)
+        const { promise, resolve, reject } = Promise.withResolvers<DirectResponse<T>>()
+        let timeoutId: NodeJS.Timeout
+
+        const cleanup = (): void => {
+            clearTimeout(timeoutId)
+            this.eventEmitter?.removeAllListeners(correlationId)
+        }
+
+        const onResponse = (args: DirectResponse<T>): void => {
+            this.logger.info(`Received direct event response: ${event}`, { traceId: headers.traceId })
+            this.logger.io(`Direct event response message`, { body: args.body, traceId: headers.traceId })
+            resolve(args)
+        }
+
+        this.eventEmitter?.once(correlationId, onResponse)
+
+        try {
+            await this.publishRequest(message, exchangeName, routingKey, amqpPublisherPublishOptions)
+
+            const responseTimeout = publishDirectOptions.responseTimeout ?? this.directResponseTimeout
+
+            timeoutId = setTimeout(() => {
                 reject(new ExternalCommunicatorError(`Time out for external event: ${event}`, HttpStatusCode.GATEWAY_TIMEOUT))
-            }, responseTimeoutMs)
+            }, responseTimeout)
 
-            this.eventEmitter?.once<DirectResponse>(correlationId, (args: DirectResponse<T>) => {
-                clearTimeout(timeout)
-                this.logger.info(`Received direct event response: ${event}`, { traceId: headers.traceId })
-                this.logger.io(`Direct event response message`, { body: args.body, traceId: headers.traceId })
-
-                return resolve(args)
-            })
-            try {
-                this.publishRequest(message, exchangeName, routingKey, publishOptions)
-            } catch (err) {
-                reject(err)
-            }
-        })
+            return await promise
+        } finally {
+            cleanup()
+        }
     }
 
     private collectMetrics(startTime: bigint, route: string, source: string, destination: string, errorType?: ErrorType): void {

@@ -3,18 +3,15 @@ import { randomUUID } from 'node:crypto'
 import { EventEmitter } from 'node:events'
 
 import lodash from 'lodash'
-import pTimeout from 'p-timeout'
 
 import { MetricsService } from '@diia-inhouse/diia-metrics'
-import { InternalServerError } from '@diia-inhouse/errors'
 import { Logger } from '@diia-inhouse/types'
 
 import constants from '../../constants.js'
-import { ConnectionStatus, PublishingResult, emptyMessageBrokerServiceConfig } from '../../interfaces/index.js'
+import { ConnectionStatus, emptyMessageBrokerServiceConfig, PublishingResult } from '../../interfaces/index.js'
 import { ExchangeOptions, MessageBrokerServiceConfig, QueueOptions } from '../../interfaces/messageBrokerServiceConfig.js'
 import { MessageHandler } from '../../interfaces/messageHandler.js'
-import { PublishDirectOptions, PublishOptions } from '../../interfaces/options.js'
-import { MessageHeaders } from '../../interfaces/providers/rabbitmq/amqpPublisher.js'
+import { PublishDirectMessageOptions, PublishOptions } from '../../interfaces/options.js'
 import {
     ConnectionClientType,
     ConnectionList,
@@ -36,6 +33,7 @@ import { AmqpAsserter } from './amqpAsserter.js'
 import { AmqpConnection } from './amqpConnection.js'
 import { AmqpListener } from './amqpListener.js'
 import { AmqpPublisher } from './amqpPublisher.js'
+import { MessageHeaders } from './amqpPublisher.types.js'
 
 export class RabbitMQProvider extends EventEmitter {
     private initializingLock?: Promise<void>
@@ -51,6 +49,12 @@ export class RabbitMQProvider extends EventEmitter {
         [ConnectionClientType.Asserter]: {},
         [ConnectionClientType.Publisher]: {},
     }
+
+    private readonly publishTimeout = 10_000
+
+    private readonly directResponseTimeout = 10_000
+
+    private readonly throwOnPublishTimeout = true
 
     private readonly publisherIsNotInitializedErrorMsg = 'Publisher is not initialized'
 
@@ -132,28 +136,18 @@ export class RabbitMQProvider extends EventEmitter {
         routingKey: string = constants.DEFAULT_ROUTING_KEY,
         options?: PublishOptions,
     ): Promise<PublishingResult> {
-        const { publishTimeout = Infinity, throwOnPublishTimeout = true, delay } = options || {}
+        const { delay, publishTimeout = this.publishTimeout, throwOnPublishTimeout = this.throwOnPublishTimeout } = options || {}
 
-        const publishTask = async (): Promise<PublishingResult> => {
-            const headers = this.preparePublisherHeaders(delay)
+        const headers = this.preparePublisherHeaders(delay)
 
-            if (!this.publisher) {
-                throw new Error(this.publisherIsNotInitializedErrorMsg)
-            }
-
-            return await this.publisher?.publishToExchange(exchangeName, message, headers, routingKey)
+        if (!this.publisher) {
+            throw new Error(this.publisherIsNotInitializedErrorMsg)
         }
 
-        const timeoutMsg = `Publishing message to ${exchangeName} exchange with ${routingKey} routing key timeout exceed`
-
-        if (throwOnPublishTimeout) {
-            return await pTimeout(publishTask(), publishTimeout, timeoutMsg)
-        }
-
-        return await pTimeout(publishTask(), publishTimeout, () => {
-            this.logger.error(timeoutMsg, { publishTimeout })
-
-            throw new InternalServerError(timeoutMsg)
+        return await this.publisher.publishToExchange(exchangeName, message, headers, routingKey, {
+            ...options,
+            publishTimeout,
+            throwOnPublishTimeout,
         })
     }
 
@@ -161,7 +155,7 @@ export class RabbitMQProvider extends EventEmitter {
         message: QueueMessageData,
         exchangeName: string,
         routingKey: string = constants.DEFAULT_ROUTING_KEY,
-        options?: PublishDirectOptions,
+        options?: PublishDirectMessageOptions,
     ): Promise<T> {
         const headers = this.preparePublisherHeaders()
 
@@ -169,7 +163,12 @@ export class RabbitMQProvider extends EventEmitter {
             throw new Error(this.publisherIsNotInitializedErrorMsg)
         }
 
-        return await this.publisher?.publishToExchangeDirect<T>(exchangeName, message, headers, routingKey, options?.timeout)
+        const { publishTimeout = this.publishTimeout } = options || {}
+
+        return await this.publisher.publishToExchangeDirect<T>(exchangeName, message, headers, routingKey, {
+            ...options,
+            publishTimeout,
+        })
     }
 
     getStatus(): RabbitMQStatus {
@@ -210,7 +209,10 @@ export class RabbitMQProvider extends EventEmitter {
     async makeAMQPPublisher(): Promise<AmqpPublisher> {
         const connection = await this.getConnection(ConnectionClientType.Publisher)
 
-        return new AmqpPublisher(connection, this.logger, this.rabbitMQMetricsService, this.systemServiceName)
+        return new AmqpPublisher(connection, this.logger, this.rabbitMQMetricsService, this.systemServiceName, {
+            publishTimeout: this.publishTimeout,
+            directResponseTimeout: this.directResponseTimeout,
+        })
     }
 
     private async setListener(queuesOptions: QueueOptions[]): Promise<AmqpListener> {

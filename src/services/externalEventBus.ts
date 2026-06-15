@@ -11,15 +11,13 @@ import {
     Message,
     MessageBrokerServiceEventsListener,
     MessagePayload,
-    PublishDirectOptions,
-    PublishExternalEventOptions,
-    PublishOptions,
     PublishingResult,
     QueueMessageMetaData,
     QueueName,
     QueueTypes,
 } from '../interfaces/index.js'
 import { ExchangeName, ExchangeOptions, QueueOptions } from '../interfaces/messageBrokerServiceConfig.js'
+import { PublishDirectMessageOptions, PublishDirectOptions, PublishOptions } from '../interfaces/options.js'
 import { EventName } from '../interfaces/queueConfig/index.js'
 import { RabbitMQProvider } from '../providers/rabbitmq/index.js'
 import Communicator from './communicator.js'
@@ -84,7 +82,7 @@ export class ExternalEventBus extends Communicator implements ExternalEventBusQu
     }
 
     async publish(eventName: EventName, payload: MessagePayload, options?: PublishOptions): Promise<PublishingResult> {
-        const message = this.getPublishMessage(eventName, payload, options)
+        const message = this.getPublishMessage(eventName, payload)
 
         const routingKey = this.getPublishRoutingKey(eventName)
 
@@ -106,9 +104,14 @@ export class ExternalEventBus extends Communicator implements ExternalEventBusQu
 
         const routingKey: string = ExternalEventBus.BuildRequestRoutingKey(eventName)
 
-        const { data } = this.getPublishMessage(eventName, payload, options)
+        const { data } = this.getPublishDirectMessage(eventName, payload, options)
 
-        return await this.queueProvider.publishExternalDirect(data, exchangeName, routingKey, options)
+        const publishDirectMessageOptions: PublishDirectMessageOptions = {
+            responseTimeout: options.timeout,
+            publishTimeout: options.publishTimeout,
+        }
+
+        return await this.queueProvider.publishExternalDirect(data, exchangeName, routingKey, publishDirectMessageOptions)
     }
 
     protected getUnicastListeners(): MessageBrokerServiceEventsListener[] {
@@ -131,7 +134,21 @@ export class ExternalEventBus extends Communicator implements ExternalEventBusQu
         return this.eventCommunicator.getMulticastListeners(queuesOptions, exchangesOptions, this.eventQueueMap)
     }
 
-    private getPublishMessage(eventName: EventName, message: MessagePayload, options?: PublishExternalEventOptions): Message {
+    private getPublishMessage(eventName: EventName, message: MessagePayload): Message {
+        const {
+            rabbit: { custom: { responseRoutingKeyPrefix } = {} },
+        } = this.queueProvider.getConfig()
+
+        const responseRoutingKey = this.buildResponseQueueName(eventName, responseRoutingKeyPrefix)
+
+        const partialMeta: Partial<QueueMessageMetaData> = this.publishEventsSet.has(eventName) ? { responseRoutingKey } : {}
+
+        const data = this.getPublishQueueMessageData(eventName, message, partialMeta)
+
+        return new Message(data)
+    }
+
+    private getPublishDirectMessage(eventName: EventName, message: MessagePayload, options?: PublishDirectOptions): Message {
         const {
             rabbit: { custom: { responseRoutingKeyPrefix } = {} },
         } = this.queueProvider.getConfig()

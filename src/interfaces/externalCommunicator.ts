@@ -37,6 +37,11 @@ export interface ReceiveDirectOps {
      * Defaults to a freshly generated `randomUUID()` when omitted.
      */
     requestUuid?: string
+    /**
+     * Timeout (ms) for publish drain / backpressure wait
+     * @default 10000
+     */
+    publishTimeout?: number
 }
 
 export interface ExternalCommunicatorResponseError {

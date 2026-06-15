@@ -7,11 +7,11 @@ import {
     ExchangeName,
     ExchangeType,
     MessageBrokerServiceEventsListener,
+    MessagePayload,
     PublishOptions,
     PublishingResult,
 } from '../interfaces/index.js'
 import { ExchangeOptions } from '../interfaces/messageBrokerServiceConfig.js'
-import { MessagePayload } from '../interfaces/providers/rabbitmq/amqpPublisher.js'
 import { EventName, QueueName } from '../interfaces/queueConfig/index.js'
 import { RabbitMQProvider } from '../providers/rabbitmq/index.js'
 import Communicator from './communicator.js'

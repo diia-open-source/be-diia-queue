@@ -9,7 +9,7 @@ import {
     ExportConfig,
     MessageData,
     PublishDirectOptions,
-    PublishExternalEventOptions,
+    PublishOptions,
     QueueMessageMetaData,
     emptyMessageBrokerServiceConfig,
 } from '@src/interfaces'
@@ -438,7 +438,7 @@ describe('ExternalEventBus', () => {
 
                     const spiedPublish = queueProvider.publish.mockResolvedValue()
 
-                    const publishOptions: PublishExternalEventOptions = {
+                    const publishOptions: PublishOptions = {
                         publishTimeout: 100,
                         throwOnPublishTimeout: true,
                     }
@@ -699,7 +699,7 @@ describe('ExternalEventBus', () => {
 
                     const spiedPublish = queueProvider.publish.mockResolvedValue()
 
-                    const publishOptions: PublishExternalEventOptions = {
+                    const publishOptions: PublishOptions = {
                         publishTimeout: 100,
                         throwOnPublishTimeout: true,
                     }
@@ -847,7 +847,10 @@ describe('ExternalEventBus', () => {
                         expectedMsgData,
                         alternativeExchange,
                         `queue.diia.${defaultFakeEvent}.req`,
-                        options,
+                        {
+                            responseTimeout: options.timeout,
+                            publishTimeout: options.publishTimeout,
+                        },
                     )
                 })
             })

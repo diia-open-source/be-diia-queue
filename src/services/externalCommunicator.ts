@@ -4,7 +4,8 @@ import Logger from '@diia-inhouse/diia-logger'
 import { ExternalCommunicatorError } from '@diia-inhouse/errors'
 
 import { ExternalCommunicatorResponse, ReceiveDirectOps } from '../interfaces/externalCommunicator.js'
-import { ExternalEventBusQueue, MessagePayload, PublishDirectOptions, QueueMessageData } from '../interfaces/index.js'
+import { ExternalEventBusQueue, MessagePayload, QueueMessageData } from '../interfaces/index.js'
+import { PublishDirectOptions } from '../interfaces/options.js'
 import { EventMessageValidator } from './eventMessageValidator.js'
 
 export class ExternalCommunicator {
@@ -114,11 +115,11 @@ export class ExternalCommunicator {
      * ```
      */
     async receiveDirect<T>(event: string, request: unknown = {}, ops: ReceiveDirectOps): Promise<T> {
-        const { exchangeName, validationRules, ignoreCache, timeout, registryApiVersion, requestUuid = randomUUID() } = ops
+        const { exchangeName, publishTimeout, validationRules, ignoreCache, timeout, registryApiVersion, requestUuid = randomUUID() } = ops
 
         const payload: MessagePayload = { uuid: requestUuid, request }
 
-        const options: PublishDirectOptions = { ignoreCache, timeout, exchangeName, registryApiVersion }
+        const options: PublishDirectOptions = { ignoreCache, timeout, exchangeName, registryApiVersion, publishTimeout }
         const externalResponse = await this.externalEventBus.publishDirect<QueueMessageData<ExternalCommunicatorResponse<T>>>(
             event,
             payload,
