@@ -114,7 +114,9 @@ describe('AmqpListener', () => {
 
             await amqpHelper.publishMessageToExchange(exchangeName, messageDataAfterDelete, routingKey)
 
-            await setTimeout(2000)
+            // The listener recreates its channel with a back-off (~2s) after the queue is deleted, so poll until
+            // both messages are handled instead of waiting a fixed time that races against that reconnect delay.
+            await vi.waitFor(() => expect(handler).toHaveBeenCalledTimes(2), { timeout: 10_000, interval: 50 })
 
             // Assert
             const expectedMessageDataBeforeDelete: QueueMessageData = getExpectedMsgData(
