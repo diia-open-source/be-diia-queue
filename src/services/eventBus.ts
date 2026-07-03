@@ -56,21 +56,20 @@ export class EventBus extends Communicator implements EventBusQueue, OnInit {
             rabbit: { declareOptions: { assertExchanges } = {} },
         } = this.queueProvider.getConfig()
 
-        const globalExchangeNames = this.optionsBuilder.getExchangeNamesByQueueName(this.queueName)
+        const exchangeNames = this.optionsBuilder.getExchangeNamesByQueueName(this.queueName)
 
-        const globalExchangesOptions: ExchangeOptions[] = []
+        const exchangesOptions: ExchangeOptions[] = []
 
-        for (const globalExchangeName of globalExchangeNames) {
-            globalExchangesOptions.push({
-                name: globalExchangeName,
+        for (const exchangeName of exchangeNames) {
+            exchangesOptions.push({
+                name: exchangeName,
                 declare: assertExchanges,
                 type: ExchangeType.Topic,
+                bindTo: [],
             })
         }
 
-        const { exchangesOptions: messageBrokerServiceConfigExchangesOptions } = this.queueProvider.getMessageBrokerServiceConfig()
-
-        return [...globalExchangesOptions, ...messageBrokerServiceConfigExchangesOptions]
+        return exchangesOptions
     }
 
     protected getMulticastListeners(): MessageBrokerServiceEventsListener[] {

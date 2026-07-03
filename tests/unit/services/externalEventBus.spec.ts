@@ -106,17 +106,18 @@ describe('ExternalEventBus', () => {
 
     const expectedDefaultExchangeOptions: ExchangeOptions = getExchangeOptions({
         name: expectedDefaultExchangeName,
-        declare: defaultExportConfig.rabbit.declareOptions.assertExchanges,
+        declare: defaultExportConfig.rabbit.declareOptions?.assertExchanges,
+        bindTo: [],
     })
     const expectedDefaultReqQueueOptions: QueueOptions = getQueueOptions(
         {
             name: expectedDefaultReqQueueName,
-            declare: defaultExportConfig.rabbit.declareOptions.assertQueues,
+            declare: defaultExportConfig.rabbit.declareOptions?.assertQueues,
             bindTo: [
                 {
                     routingKey: expectedDefaultReqQueueName,
                     exchangeName: expectedDefaultExchangeName,
-                    bind: defaultExportConfig.rabbit.declareOptions.assertQueues,
+                    bind: defaultExportConfig.rabbit.declareOptions?.assertQueues,
                 },
             ],
             consumerOptions: { prefetchCount: defaultExportConfig.rabbit.listenerOptions.prefetchCount },
@@ -127,12 +128,12 @@ describe('ExternalEventBus', () => {
     const expectedDefaultResQueueOptions: QueueOptions = getQueueOptions(
         {
             name: expectedDefaultResQueueName,
-            declare: defaultExportConfig.rabbit.declareOptions.assertQueues,
+            declare: defaultExportConfig.rabbit.declareOptions?.assertQueues,
             bindTo: [
                 {
                     routingKey: expectedDefaultResQueueName,
                     exchangeName: expectedDefaultExchangeName,
-                    bind: defaultExportConfig.rabbit.declareOptions.assertQueues,
+                    bind: defaultExportConfig.rabbit.declareOptions?.assertQueues,
                 },
             ],
             consumerOptions: { prefetchCount: defaultExportConfig.rabbit.listenerOptions.prefetchCount },
@@ -235,7 +236,7 @@ describe('ExternalEventBus', () => {
                                     {
                                         exchangeName: expectedDefaultExchangeName,
                                         routingKey: expectedPortalReqQueueName,
-                                        bind: defaultExportConfig.rabbit.declareOptions.assertQueues,
+                                        bind: defaultExportConfig.rabbit.declareOptions?.assertQueues,
                                     },
                                 ],
                             },
@@ -335,7 +336,7 @@ describe('ExternalEventBus', () => {
                             expectedDefaultReqQueueOptions,
                             expectedDefaultResQueueOptions,
                         ]),
-                        exchangesOptions: [expectedDefaultExchangeOptions, exchangeOptions],
+                        exchangesOptions: [exchangeOptions, expectedDefaultExchangeOptions],
                     })
 
                     expect(spiedSubscribe).toHaveBeenCalledTimes(3)
@@ -608,6 +609,7 @@ describe('ExternalEventBus', () => {
                     const overriddenDefaultExchangeOptions: ExchangeOptions = getExchangeOptions({
                         name: expectedDefaultExchangeName,
                         declare: true,
+                        bindTo: [],
                     })
 
                     queueProvider.getConfig.mockReturnValue(defaultExportConfig)
@@ -712,7 +714,7 @@ describe('ExternalEventBus', () => {
                             expectedDefaultResQueueOptions,
                             expectedDefaultReqQueueOptions,
                         ]),
-                        exchangesOptions: [expectedDefaultExchangeOptions, exchangeOptions],
+                        exchangesOptions: [exchangeOptions, expectedDefaultExchangeOptions],
                     })
 
                     expect(spiedSubscribe).toHaveBeenCalledTimes(2)

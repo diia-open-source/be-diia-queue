@@ -142,14 +142,14 @@ export function getBindOptions(opts: Partial<BindOptions> = {}): BindOptions {
     }
 }
 
-export function getBindTo(partialBindTo: Partial<BindOptions>[] = [{}]): BindOptions[] | undefined {
+export function getBindTo(partialBindTo: Partial<BindOptions>[] = [{}]): BindOptions[] {
     const bindTo: BindOptions[] = []
 
     for (const bindOptions of partialBindTo) {
         bindTo.push(getBindOptions(bindOptions))
     }
 
-    return bindTo.length > 0 ? bindTo : undefined
+    return bindTo
 }
 
 export function getQueueOptions(opts: Partial<QueueOptions> = {}, serviceName?: string, hostName?: string): QueueOptions {
@@ -162,13 +162,13 @@ export function getQueueOptions(opts: Partial<QueueOptions> = {}, serviceName?: 
         type: type,
         declare: declare,
         options: options,
-        redeclareOptions,
         bindTo: getBindTo(bindTo),
         consumerOptions: {
             recreateChannelOptions: {},
             consumerTag,
             ...consumerOptions,
         },
+        ...(redeclareOptions ? { redeclareOptions } : {}),
     }
 }
 

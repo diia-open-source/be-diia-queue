@@ -109,19 +109,20 @@ describe('ScheduledTask', () => {
 
         const expectedDefaultExchangeOptions: ExchangeOptions = getExchangeOptions({
             name: defaultExchangeName,
-            declare: defaultSubscriberExportConfig.rabbit.declareOptions.assertExchanges,
+            declare: defaultSubscriberExportConfig.rabbit.declareOptions?.assertExchanges,
+            bindTo: [],
         })
 
         const expectedDefaultQueueOptions: QueueOptions = getQueueOptions(
             {
                 name: defaultQueueName,
-                declare: defaultSubscriberExportConfig.rabbit.declareOptions.assertQueues,
+                declare: defaultSubscriberExportConfig.rabbit.declareOptions?.assertQueues,
                 options: defaultSubscriberExportConfig.rabbit.listenerOptions.queueOptions,
                 bindTo: [
                     {
                         exchangeName: defaultExchangeName,
                         routingKey: defaultQueueRoutingKey,
-                        bind: defaultSubscriberExportConfig.rabbit.declareOptions.assertQueues,
+                        bind: defaultSubscriberExportConfig.rabbit.declareOptions?.assertQueues,
                     },
                 ],
                 consumerOptions: {
@@ -186,6 +187,7 @@ describe('ScheduledTask', () => {
                         name: defaultExchangeName,
                         type: ExchangeType.Fanout,
                         declare: true,
+                        bindTo: [],
                     })
 
                     queueProvider.getConfig.mockReturnValue(defaultSubscriberExportConfig)
@@ -384,7 +386,7 @@ describe('ScheduledTask', () => {
 
                     // Assert
                     expect(spiedInit).toHaveBeenCalledExactlyOnceWith({
-                        exchangesOptions: [expectedDefaultExchangeOptions, exchangeOptions],
+                        exchangesOptions: [exchangeOptions, expectedDefaultExchangeOptions],
                         queuesOptions: [expectedDefaultQueueOptions, queueOptions1, queueOptions3],
                     })
 
@@ -537,7 +539,7 @@ describe('ScheduledTask', () => {
                     const expectedMsgData = getExpectedMsgData(messageData.event, messageData.payload)
 
                     expect(spiedInit).toHaveBeenCalledExactlyOnceWith({
-                        exchangesOptions: [expectedDefaultExchangeOptions, exchangeOptions],
+                        exchangesOptions: [exchangeOptions, expectedDefaultExchangeOptions],
                         queuesOptions: [expectedDefaultQueueOptions, queueOptions1, queueOptions3],
                     })
 
@@ -567,7 +569,8 @@ describe('ScheduledTask', () => {
 
         const expectedDefaultExchangeOptions = getExchangeOptions({
             name: defaultExchangeName,
-            declare: defaultPublisherExportConfig.rabbit.declareOptions.assertExchanges,
+            declare: defaultPublisherExportConfig.rabbit.declareOptions?.assertExchanges,
+            bindTo: [],
         })
 
         describe('method: `onInit`', () => {

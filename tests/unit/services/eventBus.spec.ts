@@ -97,19 +97,20 @@ describe('EventBus', () => {
 
     const expectedDefaultExchangeOptions: ExchangeOptions = getExchangeOptions({
         name: defaultExchangeName,
-        declare: defaultExportConfig.rabbit.declareOptions.assertExchanges,
+        declare: defaultExportConfig.rabbit.declareOptions?.assertExchanges,
+        bindTo: [],
     })
 
     const expectedDefaultQueueOptions: QueueOptions = getQueueOptions(
         {
             name: defaultQueueName,
-            declare: defaultExportConfig.rabbit.declareOptions.assertQueues,
+            declare: defaultExportConfig.rabbit.declareOptions?.assertQueues,
             options: defaultExportConfig.rabbit.listenerOptions.queueOptions,
             bindTo: [
                 {
                     exchangeName: defaultExchangeName,
                     routingKey: constants.DEFAULT_ROUTING_KEY,
-                    bind: defaultExportConfig.rabbit.declareOptions.assertQueues,
+                    bind: defaultExportConfig.rabbit.declareOptions?.assertQueues,
                 },
             ],
             consumerOptions: {
@@ -213,6 +214,7 @@ describe('EventBus', () => {
                         name: defaultExchangeName,
                         type: ExchangeType.Fanout,
                         declare: true,
+                        bindTo: [],
                     })
 
                     queueProvider.getConfig.mockReturnValue(defaultExportConfig)
@@ -405,7 +407,7 @@ describe('EventBus', () => {
 
                     // Assert
                     expect(spiedInit).toHaveBeenCalledExactlyOnceWith({
-                        exchangesOptions: [expectedDefaultExchangeOptions, exchangeOptions],
+                        exchangesOptions: [exchangeOptions, expectedDefaultExchangeOptions],
                         queuesOptions: [
                             expectedDefaultQueueOptions,
                             queueOptions1,

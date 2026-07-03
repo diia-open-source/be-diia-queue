@@ -123,10 +123,9 @@ export class ExternalEventBus extends Communicator implements ExternalEventBusQu
     }
 
     protected getProducerExchangesOptions(): ExchangeOptions[] {
-        const [globalExchangesOptions] = this.defineQueuesAndExchangesOptionsBasedOnGlobalConfig()
-        const { exchangesOptions: messageBrokerServiceConfigExchangesOptions } = this.queueProvider.getMessageBrokerServiceConfig()
+        const [exchangesOptions] = this.defineQueuesAndExchangesOptionsBasedOnGlobalConfig()
 
-        return [...globalExchangesOptions, ...messageBrokerServiceConfigExchangesOptions]
+        return exchangesOptions
     }
 
     protected override getMulticastListeners(): MessageBrokerServiceEventsListener[] {
@@ -221,6 +220,7 @@ export class ExternalEventBus extends Communicator implements ExternalEventBusQu
                 name: exchangeName,
                 type: ExchangeType.Topic,
                 declare: assertExchanges,
+                bindTo: [],
             }
 
             exchangesMap.set(exchangeName, exchangeOptions)

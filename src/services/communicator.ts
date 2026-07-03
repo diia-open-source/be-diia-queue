@@ -235,27 +235,29 @@ export default abstract class Communicator {
         const queuesMap: Map<QueueName, QueueOptions> = new Map()
         const exchangesMap: Map<ExchangeName, ExchangeOptions> = new Map()
 
+        const { queuesOptions, exchangesOptions: explicitExchangesOptions } = this.queueProvider.getMessageBrokerServiceConfig()
+
+        for (const exchangeOpts of [...explicitExchangesOptions, ...implicitExchangesOptions]) {
+            if (!exchangesMap.has(exchangeOpts.name)) {
+                exchangesMap.set(exchangeOpts.name, exchangeOpts)
+            }
+        }
+
         for (const listener of listeners) {
             const { queueOptions, exchangesOptions } = listener
 
             queuesMap.set(queueOptions.name, queueOptions)
 
             for (const exchangeOptions of exchangesOptions) {
-                exchangesMap.set(exchangeOptions.name, exchangeOptions)
+                if (!exchangesMap.has(exchangeOptions.name)) {
+                    exchangesMap.set(exchangeOptions.name, exchangeOptions)
+                }
             }
         }
-
-        const { queuesOptions, exchangesOptions: explicitExchangesOptions } = this.queueProvider.getMessageBrokerServiceConfig()
 
         for (const queueOpts of queuesOptions) {
             if (!queuesMap.has(queueOpts.name)) {
                 queuesMap.set(queueOpts.name, queueOpts)
-            }
-        }
-
-        for (const exchangeOpts of [...explicitExchangesOptions, ...implicitExchangesOptions]) {
-            if (!exchangesMap.has(exchangeOpts.name)) {
-                exchangesMap.set(exchangeOpts.name, exchangeOpts)
             }
         }
 
