@@ -123,9 +123,10 @@ export class ExternalEventBus extends Communicator implements ExternalEventBusQu
     }
 
     protected getProducerExchangesOptions(): ExchangeOptions[] {
-        const [exchangesOptions] = this.defineQueuesAndExchangesOptionsBasedOnGlobalConfig()
+        const [globalExchangesOptions] = this.defineQueuesAndExchangesOptionsBasedOnGlobalConfig()
+        const { exchangesOptions: messageBrokerServiceConfigExchangesOptions } = this.queueProvider.getMessageBrokerServiceConfig()
 
-        return exchangesOptions
+        return [...globalExchangesOptions, ...messageBrokerServiceConfigExchangesOptions]
     }
 
     protected override getMulticastListeners(): MessageBrokerServiceEventsListener[] {

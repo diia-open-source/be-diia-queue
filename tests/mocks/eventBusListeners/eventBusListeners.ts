@@ -1,4 +1,4 @@
-import { EventBusListener, NackOptions } from '@src/interfaces'
+import { EventBusListener, EventName, NackOptions } from '@src/interfaces'
 
 export const TestEventBusListenerName = 'test-event'
 
@@ -8,6 +8,14 @@ export class TestEventBusListener implements EventBusListener {
         public nackOptions?: NackOptions,
         public event = TestEventBusListenerName,
     ) {}
+
+    async handler(): Promise<unknown> {
+        return
+    }
+}
+
+export class TestEventBusEventListener implements EventBusListener {
+    constructor(public event: EventName) {}
 
     async handler(): Promise<unknown> {
         return

@@ -40,6 +40,13 @@ export class EventCommunicator {
 
             const eventNames = this.defineEventNamesByQueueName(queueName, eventQueueMap)
 
+            const hasListenerExists = this.listenerList.some(
+                ({ queueNames = [], event }) => queueNames.includes(queueName) || eventNames.includes(event),
+            )
+            if (!hasListenerExists) {
+                continue
+            }
+
             const listener: MessageBrokerServiceEventsListener = {
                 eventNames,
                 queueOptions,

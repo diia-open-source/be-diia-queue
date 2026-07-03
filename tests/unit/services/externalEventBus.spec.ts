@@ -17,7 +17,7 @@ import { RabbitMQProvider } from '@src/providers/rabbitmq'
 import { ExternalEventBus } from '@src/services'
 
 import { getExchangeOptions, getExportConfig, getQueueOptions, getRabbitMQConfig } from '@mocks/config'
-import { TestEventBusListener } from '@mocks/eventBusListeners/eventBusListeners'
+import { TestEventBusEventListener, TestEventBusListener } from '@mocks/eventBusListeners/eventBusListeners'
 import { getExpectedMsgData } from '@mocks/providers/rabbitmq/amqpPublisher'
 
 import { eventMessageHandler, logger } from '@tests/unit/mocks'
@@ -149,8 +149,8 @@ describe('ExternalEventBus', () => {
                     queueProvider.getConfig.mockReturnValue(defaultExportConfig)
                     queueProvider.getMessageBrokerServiceConfig.mockReturnValue(emptyMessageBrokerServiceConfig)
 
-                    const eventBusListener1 = new TestEventBusListener()
-                    const eventBusListener2 = new TestEventBusListener()
+                    const eventBusListener1 = new TestEventBusEventListener(defaultPublishEvent)
+                    const eventBusListener2 = new TestEventBusEventListener(defaultSubscribeEvent)
 
                     const eventListenerList = [eventBusListener1, eventBusListener2]
 
@@ -198,8 +198,8 @@ describe('ExternalEventBus', () => {
                     queueProvider.getConfig.mockReturnValue(exportConfig)
                     queueProvider.getMessageBrokerServiceConfig.mockReturnValue(emptyMessageBrokerServiceConfig)
 
-                    const eventBusListener1 = new TestEventBusListener()
-                    const eventBusListener2 = new TestEventBusListener()
+                    const eventBusListener1 = new TestEventBusEventListener(defaultPublishEvent)
+                    const eventBusListener2 = new TestEventBusEventListener(defaultSubscribeEvent)
 
                     const eventListenerList = [eventBusListener1, eventBusListener2]
 
@@ -306,9 +306,10 @@ describe('ExternalEventBus', () => {
                     })
 
                     const eventBusListener1 = new TestEventBusListener([reqQueueOptions.name])
-                    const eventBusListener2 = new TestEventBusListener()
+                    const eventBusListener2 = new TestEventBusEventListener(defaultPublishEvent)
+                    const eventBusListener3 = new TestEventBusEventListener(defaultSubscribeEvent)
 
-                    const eventListenerList = [eventBusListener1, eventBusListener2]
+                    const eventListenerList = [eventBusListener1, eventBusListener2, eventBusListener3]
 
                     const externalEventBus = new ExternalEventBus(
                         logger,
@@ -367,9 +368,10 @@ describe('ExternalEventBus', () => {
                     })
 
                     const eventBusListener1 = new TestEventBusListener([reqQueueOptions.name])
-                    const eventBusListener2 = new TestEventBusListener()
+                    const eventBusListener2 = new TestEventBusEventListener(defaultPublishEvent)
+                    const eventBusListener3 = new TestEventBusEventListener(defaultSubscribeEvent)
 
-                    const eventListenerList = [eventBusListener1, eventBusListener2]
+                    const eventListenerList = [eventBusListener1, eventBusListener2, eventBusListener3]
 
                     const externalEventBus = new ExternalEventBus(
                         logger,
@@ -568,12 +570,17 @@ describe('ExternalEventBus', () => {
                     queueProvider.getConfig.mockReturnValue(defaultExportConfig)
                     queueProvider.getMessageBrokerServiceConfig.mockReturnValue(emptyMessageBrokerServiceConfig)
 
+                    const eventListenerList = [
+                        new TestEventBusEventListener(defaultPublishEvent),
+                        new TestEventBusEventListener(defaultSubscribeEvent),
+                    ]
+
                     const externalEventBus = new ExternalEventBus(
                         logger,
                         defaultServiceName,
                         envService,
                         queueProvider,
-                        [],
+                        eventListenerList,
                         eventMessageHandler,
                         defaultHostName,
                     )
@@ -594,6 +601,41 @@ describe('ExternalEventBus', () => {
                     expect(spiedSubscribe).toHaveBeenCalledTimes(2)
                     expect(spiedSubscribe).toHaveBeenNthCalledWith(1, expectedDefaultResQueueName, expect.any(Function))
                     expect(spiedSubscribe).toHaveBeenNthCalledWith(2, expectedDefaultReqQueueName, expect.any(Function))
+                })
+
+                it('should override global exchange options with messageBrokerServiceConfig exchanges options', async () => {
+                    // Arrange
+                    const overriddenDefaultExchangeOptions: ExchangeOptions = getExchangeOptions({
+                        name: expectedDefaultExchangeName,
+                        declare: true,
+                    })
+
+                    queueProvider.getConfig.mockReturnValue(defaultExportConfig)
+                    queueProvider.getMessageBrokerServiceConfig.mockReturnValue({
+                        exchangesOptions: [overriddenDefaultExchangeOptions],
+                        queuesOptions: [],
+                    })
+
+                    const externalEventBus = new ExternalEventBus(
+                        logger,
+                        defaultServiceName,
+                        envService,
+                        queueProvider,
+                        [],
+                        eventMessageHandler,
+                        defaultHostName,
+                    )
+
+                    const spiedInit = queueProvider.init.mockResolvedValue()
+
+                    // Act
+                    await externalEventBus.onInit()
+
+                    // Assert
+                    expect(spiedInit).toHaveBeenCalledExactlyOnceWith({
+                        exchangesOptions: [overriddenDefaultExchangeOptions],
+                        queuesOptions: [],
+                    })
                 })
             })
 
@@ -641,12 +683,17 @@ describe('ExternalEventBus', () => {
                         queuesOptions: [resQueueOptions, reqQueueOptions],
                     })
 
+                    const eventListenerList = [
+                        new TestEventBusEventListener(defaultPublishEvent),
+                        new TestEventBusEventListener(defaultSubscribeEvent),
+                    ]
+
                     const externalEventBus = new ExternalEventBus(
                         logger,
                         defaultServiceName,
                         envService,
                         queueProvider,
-                        [],
+                        eventListenerList,
                         eventMessageHandler,
                         defaultHostName,
                     )

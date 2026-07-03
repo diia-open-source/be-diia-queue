@@ -176,6 +176,7 @@ export default abstract class Communicator {
         const { rabbit: { consumerEnabled } = {} } = this.queueProvider.getConfig()
 
         const producerExchangesOptions = this.getProducerExchangesOptions()
+
         const listeners = consumerEnabled === false ? [] : [...this.getMulticastListeners(), ...this.getUnicastListeners()]
 
         const serviceConfig = this.getServiceConfig(listeners, producerExchangesOptions)

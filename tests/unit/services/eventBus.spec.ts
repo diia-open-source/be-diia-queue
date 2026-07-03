@@ -9,7 +9,7 @@ import { getExchangeOptions, getExportConfig, getQueueOptions } from '@mocks/con
 import { TestEventBusListener } from '@mocks/eventBusListeners/eventBusListeners'
 import { getExpectedMsgData } from '@mocks/providers/rabbitmq/amqpPublisher'
 
-import { BaseQueueOptions, ExchangeOptions, QueueOptions, QueueTypes } from '@interfaces/messageBrokerServiceConfig'
+import { BaseQueueOptions, ExchangeOptions, ExchangeType, QueueOptions, QueueTypes } from '@interfaces/messageBrokerServiceConfig'
 
 import { eventMessageHandler, logger } from '../mocks'
 
@@ -206,6 +206,47 @@ describe('EventBus', () => {
 
                     expect(subscribeMock).toHaveBeenCalledExactlyOnceWith(defaultQueueName, expect.any(Function))
                 })
+
+                it('should override global exchange options with messageBrokerServiceConfig exchanges options', async () => {
+                    // Arrange
+                    const overriddenDefaultExchangeOptions: ExchangeOptions = getExchangeOptions({
+                        name: defaultExchangeName,
+                        type: ExchangeType.Fanout,
+                        declare: true,
+                    })
+
+                    queueProvider.getConfig.mockReturnValue(defaultExportConfig)
+                    queueProvider.getMessageBrokerServiceConfig.mockReturnValue({
+                        exchangesOptions: [overriddenDefaultExchangeOptions],
+                        queuesOptions: [],
+                    })
+
+                    const eventBusListener = new TestEventBusListener()
+
+                    const eventBus = new EventBus(
+                        queueProvider,
+                        [eventBusListener],
+                        eventMessageHandler,
+                        logger,
+                        hostname,
+                        systemServiceName,
+                        defaultQueueName,
+                    )
+
+                    const initMock = queueProvider.init.mockResolvedValue()
+
+                    queueProvider.subscribe.mockResolvedValue(true)
+
+                    // Act
+                    await eventBus.onInit()
+
+                    // Assert
+                    expect(initMock).toHaveBeenCalledExactlyOnceWith({
+                        queuesOptions: [expectedDefaultQueueOptions],
+                        exchangesOptions: [overriddenDefaultExchangeOptions],
+                    })
+                })
+
                 it('should successfully initialize eventBus with overridden queues options', async () => {
                     // Assert
                     const initMock = queueProvider.init.mockResolvedValue()

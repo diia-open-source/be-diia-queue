@@ -71,7 +71,7 @@ export class ScheduledTask extends Communicator implements ScheduledTasksQueue, 
     }
 
     protected override getProducerExchangesOptions(): ExchangeOptions[] {
-        const exchangesOptions: ExchangeOptions[] = []
+        const globalExchangesOptions: ExchangeOptions[] = []
 
         const {
             topics = {},
@@ -84,17 +84,19 @@ export class ScheduledTask extends Communicator implements ScheduledTasksQueue, 
             declare: assertExchanges,
         })
 
-        const exchangeNamesByQueueName = this.optionsBuilder.getExchangeNamesByQueueName(this.queueName)
+        const globalExchangeNamesByQueueName = this.optionsBuilder.getExchangeNamesByQueueName(this.queueName)
 
-        const exchangeNamesSet = new Set([...Object.keys(topics), ...exchangeNamesByQueueName])
+        const globalExchangeNamesSet = new Set([...Object.keys(topics), ...globalExchangeNamesByQueueName])
 
-        for (const exchangeName of exchangeNamesSet) {
-            const exchangeOptions = createExchangeOptions(exchangeName)
+        for (const globalExchangeName of globalExchangeNamesSet) {
+            const exchangeOptions = createExchangeOptions(globalExchangeName)
 
-            exchangesOptions.push(exchangeOptions)
+            globalExchangesOptions.push(exchangeOptions)
         }
 
-        return exchangesOptions
+        const { exchangesOptions: messageBrokerServiceConfigExchangesOptions } = this.queueProvider.getMessageBrokerServiceConfig()
+
+        return [...globalExchangesOptions, ...messageBrokerServiceConfigExchangesOptions]
     }
 
     private getRoutingKey(serviceName: string): string {

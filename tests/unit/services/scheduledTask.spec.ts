@@ -9,7 +9,13 @@ import { getExchangeOptions, getExportConfig, getQueueOptions } from '@mocks/con
 import { TestEventBusListener } from '@mocks/eventBusListeners/eventBusListeners'
 import { getExpectedMsgData } from '@mocks/providers/rabbitmq/amqpPublisher'
 
-import { ExchangeOptions, QueueOptions, QueueTypes, emptyMessageBrokerServiceConfig } from '@interfaces/messageBrokerServiceConfig'
+import {
+    ExchangeOptions,
+    ExchangeType,
+    QueueOptions,
+    QueueTypes,
+    emptyMessageBrokerServiceConfig,
+} from '@interfaces/messageBrokerServiceConfig'
 
 import { eventMessageHandler, logger } from '../mocks'
 
@@ -173,6 +179,48 @@ describe('ScheduledTask', () => {
 
                     expect(subscribeMock).toHaveBeenCalledExactlyOnceWith(defaultQueueName, expect.any(Function))
                 })
+
+                it('should override global exchange options with messageBrokerServiceConfig exchanges options', async () => {
+                    // Arrange
+                    const overriddenDefaultExchangeOptions: ExchangeOptions = getExchangeOptions({
+                        name: defaultExchangeName,
+                        type: ExchangeType.Fanout,
+                        declare: true,
+                    })
+
+                    queueProvider.getConfig.mockReturnValue(defaultSubscriberExportConfig)
+                    queueProvider.getMessageBrokerServiceConfig.mockReturnValue({
+                        exchangesOptions: [overriddenDefaultExchangeOptions],
+                        queuesOptions: [],
+                    })
+
+                    const scheduledTaskListener = new TestEventBusListener()
+
+                    const scheduledTask = new ScheduledTask(
+                        defaultServiceName,
+                        defaultSystemServiceName,
+                        queueProvider,
+                        [scheduledTaskListener],
+                        eventMessageHandler,
+                        logger,
+                        defaultHostName,
+                        defaultQueueName,
+                    )
+
+                    const initMock = queueProvider.init.mockResolvedValue()
+
+                    queueProvider.subscribe.mockResolvedValue(true)
+
+                    // Act
+                    await scheduledTask.onInit()
+
+                    // Assert
+                    expect(initMock).toHaveBeenCalledExactlyOnceWith({
+                        queuesOptions: [expectedDefaultQueueOptions],
+                        exchangesOptions: [overriddenDefaultExchangeOptions],
+                    })
+                })
+
                 it('should successfully initialize with overridden queue options', async () => {
                     // Arrange
                     const overriddenQueuesOptions: BaseQueueOptions = {
