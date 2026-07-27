@@ -120,12 +120,12 @@ describe('Task', () => {
                         {
                             type: QueueTypes.Quorum,
                             name: expectedTaskName,
-                            declare: emptyExportConfig.rabbit.declareOptions.assertQueues,
+                            declare: emptyExportConfig.rabbit.declareOptions?.assertQueues,
                             bindTo: [
                                 {
                                     exchangeName: expectedTaskName,
                                     routingKey: constants.DEFAULT_ROUTING_KEY,
-                                    bind: emptyExportConfig.rabbit.declareOptions.assertQueues,
+                                    bind: emptyExportConfig.rabbit.declareOptions?.assertQueues,
                                 },
                             ],
                             consumerOptions: {
@@ -138,7 +138,7 @@ describe('Task', () => {
                         {
                             delayed: true,
                             name: expectedTaskName,
-                            declare: emptyExportConfig.rabbit.declareOptions.assertExchanges,
+                            declare: emptyExportConfig.rabbit.declareOptions?.assertExchanges,
                         },
                     ],
                 })
@@ -192,12 +192,12 @@ describe('Task', () => {
                     queuesOptions: [
                         {
                             name: expectedTaskName,
-                            declare: exportConfig.rabbit.declareOptions.assertQueues,
+                            declare: exportConfig.rabbit.declareOptions?.assertQueues,
                             bindTo: [
                                 {
                                     exchangeName: expectedTaskName,
                                     routingKey: constants.DEFAULT_ROUTING_KEY,
-                                    bind: emptyExportConfig.rabbit.declareOptions.assertQueues,
+                                    bind: emptyExportConfig.rabbit.declareOptions?.assertQueues,
                                 },
                             ],
                             consumerOptions: {
@@ -211,7 +211,7 @@ describe('Task', () => {
                         {
                             delayed: true,
                             name: expectedTaskName,
-                            declare: emptyExportConfig.rabbit.declareOptions.assertExchanges,
+                            declare: emptyExportConfig.rabbit.declareOptions?.assertExchanges,
                         },
                     ],
                 })

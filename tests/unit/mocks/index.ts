@@ -21,7 +21,7 @@ export const eventListener = {
 
 export const appValidator = mock<AppValidator>({ validate: vi.fn() })
 
-export const eventMessageValidator = mock<EventMessageValidator>({
+export const eventMessageValidator: EventMessageValidator = mock<EventMessageValidator>({
     validateEventMessage: vi.fn(),
     validateSyncedEventMessage: vi.fn(),
 })

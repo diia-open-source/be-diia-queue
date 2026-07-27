@@ -54,7 +54,7 @@ export default class AmqpHelper {
     async readMessagesFromQueue(queueName: string): Promise<unknown[]> {
         const channel = await this.amqpConnection.createChannel()
 
-        const messages = []
+        const messages: unknown[] = []
 
         while (true) {
             const message = await channel.get(queueName, { noAck: true })

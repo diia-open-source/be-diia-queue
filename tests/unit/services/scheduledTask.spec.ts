@@ -289,7 +289,7 @@ describe('ScheduledTask', () => {
                         [eventBusListener],
                         eventMessageHandler,
                         logger,
-                        undefined,
+                        defaultHostName,
                     )
 
                     const spiedInit = queueProvider.init.mockResolvedValue()

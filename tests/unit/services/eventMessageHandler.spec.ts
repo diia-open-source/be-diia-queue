@@ -179,11 +179,10 @@ describe('EventMessageHandler', () => {
                     await runner()
                 })
 
-                const listener = mock<EventBusListener>()
-
+                const listener = new TestEventBusListener()
                 const nackOptions = new NackOptions()
 
-                listener.handler.mockResolvedValue(nackOptions)
+                vi.spyOn(listener, 'handler').mockResolvedValue(nackOptions)
 
                 // Act
                 await eventMessageHandler.eventListenerMessageHandler(listener, queueMessage)

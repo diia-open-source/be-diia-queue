@@ -56,7 +56,7 @@ describe('Delayed task', () => {
         const publishingTime: number = Date.now()
 
         const receivingPromise = new Promise<number>((resolve) =>
-            eventEmitter.once<number>(receivingEvent, () => {
+            eventEmitter.once(receivingEvent, () => {
                 resolve(Date.now())
             }),
         )

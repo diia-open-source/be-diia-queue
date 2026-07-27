@@ -1,6 +1,6 @@
 {
     "name": "@diia-inhouse/diia-queue",
-    "version": "14.1.10",
+    "version": "14.2.0",
     "type": "module",
     "description": "Package provide queue functionality",
     "main": "dist/index.js",
@@ -30,7 +30,7 @@
         "format": "oxfmt \"src/**/*.ts\"",
         "prepare": "npm run build",
         "semantic-release": "semantic-release",
-        "test": "vitest run",
+        "test": "tsc -project tests/tsconfig.json -noEmit && vitest run",
         "test:watch": "vitest watch",
         "find-circulars": "madge --circular --extensions ts ./"
     },

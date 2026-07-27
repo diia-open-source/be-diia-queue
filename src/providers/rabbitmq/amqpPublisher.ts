@@ -122,7 +122,7 @@ export class AmqpPublisher {
         const route = message.event
         const source = this.systemServiceName
 
-        let errorType = undefined
+        let errorType: ErrorType | undefined = undefined
         let destination = LabelUnknown
 
         try {
