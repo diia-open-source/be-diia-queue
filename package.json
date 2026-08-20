@@ -1,6 +1,6 @@
 {
     "name": "@diia-inhouse/diia-queue",
-    "version": "14.2.3",
+    "version": "14.2.4",
     "type": "module",
     "description": "Package provide queue functionality",
     "main": "dist/index.js",
@@ -50,15 +50,15 @@
         "@opentelemetry/api": ">=1.7.0"
     },
     "devDependencies": {
-        "@diia-inhouse/configs": "7.0.1",
+        "@diia-inhouse/configs": "7.1.0",
         "@diia-inhouse/diia-logger": "4.4.41",
         "@diia-inhouse/diia-metrics": "7.1.77",
         "@diia-inhouse/env": "3.3.44",
         "@diia-inhouse/errors": "2.2.16",
-        "@diia-inhouse/oxc-config": "2.1.1",
+        "@diia-inhouse/oxc-config": "2.1.2",
         "@diia-inhouse/test": "8.3.2",
-        "@diia-inhouse/types": "14.2.3",
-        "@diia-inhouse/utils": "6.0.75",
+        "@diia-inhouse/types": "14.2.4",
+        "@diia-inhouse/utils": "6.0.76",
         "@diia-inhouse/validators": "2.2.57",
         "@opentelemetry/api": "1.9.0",
         "@types/lodash": "4.17.24",
