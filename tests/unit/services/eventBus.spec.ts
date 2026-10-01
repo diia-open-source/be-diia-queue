@@ -23,10 +23,16 @@ describe('EventBus', () => {
     const defaultQueueName = 'DefaultEventBusQueue'
     const defaultExchangeName = 'DefaultEventBusExchange'
 
+    const extraExchangeName = 'ExtraExchangeName'
+    const extraEventName1 = 'extraEventName1'
+
     const partialExportConfig: Partial<ExportConfig> = {
         topics: {
             [defaultExchangeName]: {
                 events: [defaultEventName1, defaultEventName2],
+            },
+            [extraExchangeName]: {
+                events: [extraEventName1],
             },
         },
         queues: {
@@ -97,6 +103,12 @@ describe('EventBus', () => {
 
     const expectedDefaultExchangeOptions: ExchangeOptions = getExchangeOptions({
         name: defaultExchangeName,
+        declare: defaultExportConfig.rabbit.declareOptions?.assertExchanges,
+        bindTo: [],
+    })
+
+    const expectedExtraExchangeOptions: ExchangeOptions = getExchangeOptions({
+        name: extraExchangeName,
         declare: defaultExportConfig.rabbit.declareOptions?.assertExchanges,
         bindTo: [],
     })
@@ -198,7 +210,7 @@ describe('EventBus', () => {
                     // Assert
                     expect(initMock).toHaveBeenCalledExactlyOnceWith({
                         queuesOptions: [expectedDefaultQueueOptions],
-                        exchangesOptions: [expectedDefaultExchangeOptions],
+                        exchangesOptions: [expectedDefaultExchangeOptions, expectedExtraExchangeOptions],
                     })
 
                     expect(subscribeToQueuesMock).toHaveBeenCalledExactlyOnceWith([
@@ -245,7 +257,7 @@ describe('EventBus', () => {
                     // Assert
                     expect(initMock).toHaveBeenCalledExactlyOnceWith({
                         queuesOptions: [expectedDefaultQueueOptions],
-                        exchangesOptions: [overriddenDefaultExchangeOptions],
+                        exchangesOptions: [overriddenDefaultExchangeOptions, expectedExtraExchangeOptions],
                     })
                 })
 
@@ -295,7 +307,7 @@ describe('EventBus', () => {
 
                     expect(initMock).toHaveBeenCalledExactlyOnceWith({
                         queuesOptions: [expectedQueueOptions],
-                        exchangesOptions: [expectedDefaultExchangeOptions],
+                        exchangesOptions: [expectedDefaultExchangeOptions, expectedExtraExchangeOptions],
                     })
                 })
                 it('should skip to initialize event bus in case queue name was not provided', async () => {
@@ -407,7 +419,7 @@ describe('EventBus', () => {
 
                     // Assert
                     expect(spiedInit).toHaveBeenCalledExactlyOnceWith({
-                        exchangesOptions: [exchangeOptions, expectedDefaultExchangeOptions],
+                        exchangesOptions: [exchangeOptions, expectedDefaultExchangeOptions, expectedExtraExchangeOptions],
                         queuesOptions: [
                             expectedDefaultQueueOptions,
                             queueOptions1,
@@ -597,7 +609,7 @@ describe('EventBus', () => {
 
                     expect(spiedInit).toHaveBeenCalledExactlyOnceWith({
                         queuesOptions: [expectedDefaultQueueOptions],
-                        exchangesOptions: [expectedDefaultExchangeOptions],
+                        exchangesOptions: [expectedDefaultExchangeOptions, expectedExtraExchangeOptions],
                     })
 
                     expect(spiedSubscribe).toHaveBeenCalledExactlyOnceWith(defaultQueueName, expect.any(Function))
@@ -700,7 +712,7 @@ describe('EventBus', () => {
                     // Assert
                     expect(spiedInit).toHaveBeenCalledExactlyOnceWith({
                         queuesOptions: [],
-                        exchangesOptions: [expectedDefaultExchangeOptions],
+                        exchangesOptions: [expectedDefaultExchangeOptions, expectedExtraExchangeOptions],
                     })
 
                     expect(spiedSubscribe).not.toHaveBeenCalled()
@@ -794,7 +806,7 @@ describe('EventBus', () => {
 
                     // Assert
                     expect(spiedInit).toHaveBeenCalledExactlyOnceWith({
-                        exchangesOptions: [exchangeOptions, expectedDefaultExchangeOptions],
+                        exchangesOptions: [exchangeOptions, expectedDefaultExchangeOptions, expectedExtraExchangeOptions],
                         queuesOptions: [
                             queueOptions1,
                             queueOptions2,
@@ -849,7 +861,7 @@ describe('EventBus', () => {
                     // Assert
                     expect(spiedInit).toHaveBeenCalledExactlyOnceWith({
                         queuesOptions: [],
-                        exchangesOptions: [expectedDefaultExchangeOptions],
+                        exchangesOptions: [expectedDefaultExchangeOptions, expectedExtraExchangeOptions],
                     })
 
                     expect(spiedSubscribe).not.toHaveBeenCalledOnce()
@@ -953,7 +965,7 @@ describe('EventBus', () => {
 
                     expect(spiedInit).toHaveBeenCalledExactlyOnceWith({
                         queuesOptions: [queueOptions1],
-                        exchangesOptions: [exchangeOptions, expectedDefaultExchangeOptions],
+                        exchangesOptions: [exchangeOptions, expectedDefaultExchangeOptions, expectedExtraExchangeOptions],
                     })
 
                     expect(spiedSubscribe).not.toHaveBeenCalledOnce()

@@ -53,14 +53,17 @@ export class EventBus extends Communicator implements EventBusQueue, OnInit {
         }
 
         const {
+            topics = {},
             rabbit: { declareOptions: { assertExchanges } = {} },
         } = this.queueProvider.getConfig()
 
         const exchangeNames = this.optionsBuilder.getExchangeNamesByQueueName(this.queueName)
 
+        const exchangeNamesSet = new Set([...Object.keys(topics), ...exchangeNames])
+
         const exchangesOptions: ExchangeOptions[] = []
 
-        for (const exchangeName of exchangeNames) {
+        for (const exchangeName of exchangeNamesSet) {
             exchangesOptions.push({
                 name: exchangeName,
                 declare: assertExchanges,

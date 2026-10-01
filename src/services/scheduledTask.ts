@@ -78,21 +78,17 @@ export class ScheduledTask extends Communicator implements ScheduledTasksQueue, 
             rabbit: { declareOptions: { assertExchanges } = {} },
         } = this.queueProvider.getConfig()
 
-        const createExchangeOptions = (exchangeName: string): ExchangeOptions => ({
-            name: exchangeName,
-            type: ExchangeType.Topic,
-            declare: assertExchanges,
-            bindTo: [],
-        })
-
         const exchangeNamesByQueueName = this.optionsBuilder.getExchangeNamesByQueueName(this.queueName)
 
         const exchangeNamesSet = new Set([...Object.keys(topics), ...exchangeNamesByQueueName])
 
         for (const exchangeName of exchangeNamesSet) {
-            const exchangeOptions = createExchangeOptions(exchangeName)
-
-            exchangesOptions.push(exchangeOptions)
+            exchangesOptions.push({
+                name: exchangeName,
+                type: ExchangeType.Topic,
+                declare: assertExchanges,
+                bindTo: [],
+            })
         }
 
         return exchangesOptions
