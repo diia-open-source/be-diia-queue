@@ -1,6 +1,6 @@
 {
     "name": "@diia-inhouse/diia-queue",
-    "version": "14.2.38",
+    "version": "14.2.39",
     "description": "Package provide queue functionality",
     "license": "SEE LICENSE IN LICENSE.md",
     "author": "diia-team",
@@ -38,9 +38,9 @@
     },
     "devDependencies": {
         "@diia-inhouse/configs": "7.2.2",
-        "@diia-inhouse/diia-logger": "4.7.21",
-        "@diia-inhouse/diia-metrics": "7.1.148",
-        "@diia-inhouse/env": "3.3.88",
+        "@diia-inhouse/diia-logger": "4.7.22",
+        "@diia-inhouse/diia-metrics": "7.1.149",
+        "@diia-inhouse/env": "3.3.89",
         "@diia-inhouse/errors": "2.3.25",
         "@diia-inhouse/oxc-config": "5.0.0",
         "@diia-inhouse/test": "8.3.40",
