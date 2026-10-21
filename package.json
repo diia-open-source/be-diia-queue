@@ -1,6 +1,6 @@
 {
     "name": "@diia-inhouse/diia-queue",
-    "version": "14.2.39",
+    "version": "14.2.40",
     "description": "Package provide queue functionality",
     "license": "SEE LICENSE IN LICENSE.md",
     "author": "diia-team",

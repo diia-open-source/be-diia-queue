@@ -4,13 +4,16 @@ import { randomBytes } from 'node:crypto'
 import { context as otelContext, isValidTraceId, propagation, trace } from '@opentelemetry/api'
 
 import Logger from '@diia-inhouse/diia-logger'
-import { ApiError, ValidationError } from '@diia-inhouse/errors'
+import { MetricsService } from '@diia-inhouse/diia-metrics'
+import { ApiError, ErrorType, ValidationError } from '@diia-inhouse/errors'
 import { AlsData } from '@diia-inhouse/types'
 import { utils } from '@diia-inhouse/utils'
 
 import {
     EventBusListener,
     EventListeners,
+    Headers,
+    LabelUnknown,
     Listener,
     MessageProperties,
     NackOptions,
@@ -22,15 +25,22 @@ import {
 } from '../interfaces/index.js'
 import { ValidationResult } from '../interfaces/services/eventMessageHandler.js'
 import { EventMessageValidator } from './eventMessageValidator.js'
+import RabbitMQMetricsService from './metrics.js'
 
 export class EventMessageHandler {
     private readonly noRequeueNackOptions = new NackOptions(false, false)
+
+    private readonly rabbitMQMetrics: RabbitMQMetricsService
 
     constructor(
         private readonly eventMessageValidator: EventMessageValidator,
         private readonly asyncLocalStorage: AsyncLocalStorage<QueueContext>,
         private readonly logger: Logger,
-    ) {}
+        private readonly systemServiceName: string,
+        metrics: MetricsService,
+    ) {
+        this.rabbitMQMetrics = new RabbitMQMetricsService(metrics)
+    }
 
     async eventListenersMessageHandler(this: this, eventListeners: EventListeners, message: QueueMessage | null): Promise<void> {
         if (!message) {
@@ -43,6 +53,7 @@ export class EventMessageHandler {
     }
 
     async eventListenerMessageHandler(listener: EventBusListener | TaskListener | undefined, message: QueueMessage): Promise<void> {
+        const startTime = process.hrtime.bigint()
         const {
             done,
             properties,
@@ -52,16 +63,21 @@ export class EventMessageHandler {
         const serviceCode = this.getServiceCode(listener, payload)
         const context = this.prepareAsyncContext(properties, serviceCode)
 
-        await this.asyncLocalStorage.run(context, async () => {
+        const errorType = await this.asyncLocalStorage.run(context, async () => {
             this.logger.info(`Handling event [${event}] with payload`, { payload })
             if (!listener) {
                 this.logger.info(`Not found listener for the event [${event}]`)
+                done()
 
-                return done()
+                return
             }
 
             return await this.handleMessage(listener, message)
         })
+
+        const source = properties.headers?.[Headers.sentFrom] || LabelUnknown
+
+        this.rabbitMQMetrics.collectResponseTotalMetric(startTime, event || LabelUnknown, source, this.systemServiceName, errorType)
     }
 
     private prepareAsyncContext(properties: MessageProperties, serviceCode?: string): AlsData {
@@ -73,7 +89,7 @@ export class EventMessageHandler {
         }
     }
 
-    private async handleMessage(listener: EventBusListener | TaskListener, message: QueueMessage): Promise<void> {
+    private async handleMessage(listener: EventBusListener | TaskListener, message: QueueMessage): Promise<ErrorType | undefined> {
         const {
             data,
             done,
@@ -91,10 +107,12 @@ export class EventMessageHandler {
 
         if (!isValid) {
             if (useDirectReply && error) {
-                return this.directReplyDone(message, error, true)
+                this.directReplyDone(message, error, true)
+            } else {
+                reject(this.noRequeueNackOptions)
             }
 
-            return reject(this.noRequeueNackOptions)
+            return this.getErrorType(error)
         }
 
         try {
@@ -107,16 +125,20 @@ export class EventMessageHandler {
         }
 
         if (useDirectReply) {
-            return this.directReplyDone(message, result, hasErrorOccurred)
-        }
-
-        if (result instanceof NackOptions) {
-            return reject(result)
+            this.directReplyDone(message, result, hasErrorOccurred)
+        } else if (result instanceof NackOptions) {
+            reject(result)
         } else if (hasErrorOccurred && listener.nackOptions) {
-            return reject(listener.nackOptions)
+            reject(listener.nackOptions)
+        } else {
+            done()
         }
 
-        return done()
+        return hasErrorOccurred ? this.getErrorType(result) : undefined
+    }
+
+    private getErrorType(err: unknown): ErrorType {
+        return err instanceof ApiError ? err.getType() : ErrorType.Unoperated
     }
 
     private async validateData(data: QueueMessageData, listener: Listener): Promise<ValidationResult> {

@@ -9,6 +9,8 @@ import { EventMessageHandler, QueueContext } from '@src/index'
 
 import { EventMessageValidator } from '@services/eventMessageValidator'
 
+import { makeMockMetricsService } from '@mocks/services/metricsService'
+
 export const logger = mock<Logger>()
 
 export const eventListener = {
@@ -28,4 +30,10 @@ export const eventMessageValidator: EventMessageValidator = mock<EventMessageVal
 
 export const asyncLocalStorage = mock<AsyncLocalStorage<QueueContext>>({ run: vi.fn() })
 
-export const eventMessageHandler = new EventMessageHandler(eventMessageValidator, asyncLocalStorage, logger)
+export const eventMessageHandler = new EventMessageHandler(
+    eventMessageValidator,
+    asyncLocalStorage,
+    logger,
+    'testSystemServiceName',
+    makeMockMetricsService(),
+)

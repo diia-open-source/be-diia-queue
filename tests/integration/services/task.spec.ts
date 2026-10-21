@@ -4,7 +4,8 @@ import { EventEmitter } from 'node:events'
 import { afterAll, expect } from 'vitest'
 
 import { DiiaLogger } from '@diia-inhouse/diia-logger'
-import { LogLevel } from '@diia-inhouse/types'
+import { ApiError, ErrorType } from '@diia-inhouse/errors'
+import { HttpStatusCode, LogLevel } from '@diia-inhouse/types'
 import { AppValidator } from '@diia-inhouse/validators'
 
 import constants from '@src/constants'
@@ -27,7 +28,7 @@ describe('Delayed task', () => {
     const logger = new DiiaLogger({ logLevel: LogLevel.DEBUG }, asyncLocalStorage)
     const validator = new AppValidator()
     const eventMessageValidator = new EventMessageValidator(validator)
-    const eventMessageHandler = new EventMessageHandler(eventMessageValidator, asyncLocalStorage, logger)
+    const eventMessageHandler = new EventMessageHandler(eventMessageValidator, asyncLocalStorage, logger, systemServiceName, metricsService)
     const receivingEvent = 'receiveMessage'
     const eventEmitter = new EventEmitter()
 
@@ -145,5 +146,79 @@ describe('Delayed task', () => {
 
         // Assert
         expect(spiedHandler).toHaveBeenCalledOnce()
+    })
+
+    it.each([
+        {
+            outcome: 'handler resolves',
+            taskName: 'SucceedingTask',
+            payload: { text: 'valid' },
+            handler: async (): Promise<void> => {},
+            expectedResult: { status: 'successful' },
+        },
+        {
+            outcome: 'handler throws',
+            taskName: 'FailingTask',
+            payload: { text: 'valid' },
+            handler: async (): Promise<void> => {
+                throw new ApiError('Task failed', HttpStatusCode.BAD_REQUEST, {}, undefined, ErrorType.Operated)
+            },
+            expectedResult: { status: 'failed', errorType: 'operated' },
+        },
+        {
+            outcome: 'payload is invalid',
+            taskName: 'InvalidPayloadTask',
+            payload: { text: 42 },
+            handler: async (): Promise<void> => {},
+            expectedResult: { status: 'failed', errorType: 'unoperated' },
+        },
+    ])('should record $expectedResult.status response metric when $outcome', async ({ taskName, payload, handler, expectedResult }) => {
+        // Arrange
+        const queueName = `TestQueue-${taskName}`
+        const exchangeName = `TestExchange-${taskName}`
+
+        const queue = new Queue(systemServiceName, metricsService, defaultConfig, asyncLocalStorage, logger)
+
+        const queueProvider = queue.makeInternalRabbitMQProvider('task')
+
+        vi.spyOn(queueProvider, 'getMessageBrokerServiceConfig').mockReturnValue({
+            exchangesOptions: [{ declare: true, name: exchangeName, type: ExchangeType.Direct }],
+            queuesOptions: [
+                {
+                    name: queueName,
+                    declare: true,
+                    type: QueueTypes.Quorum,
+                    options: { durable: true },
+                    bindTo: [{ bind: true, exchangeName, routingKey: constants.DEFAULT_ROUTING_KEY }],
+                },
+            ],
+        })
+
+        const testListener = new TestTaskListener(taskName, false, [queueName])
+
+        vi.spyOn(testListener, 'handler').mockImplementation(handler)
+
+        const observeResponseLatency = vi.spyOn(metricsService.responseTotalTimerMetric, 'observeSeconds')
+
+        const task = new Task(serviceName, systemServiceName, queueProvider, [testListener], eventMessageHandler, logger, hostname)
+
+        await task.onInit()
+
+        // Act
+        await task.publish(testListener.name, payload)
+
+        // Assert
+        await vi.waitFor(() =>
+            expect(observeResponseLatency).toHaveBeenCalledWith(
+                {
+                    route: `TasksQueueTestServiceName[${taskName}]`,
+                    source: systemServiceName,
+                    destination: systemServiceName,
+                    mechanism: 'rabbitmq',
+                    ...expectedResult,
+                },
+                expect.any(BigInt),
+            ),
+        )
     })
 })

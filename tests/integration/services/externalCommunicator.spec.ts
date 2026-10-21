@@ -56,7 +56,13 @@ describe(`${ExternalCommunicator.name} service`, () => {
         const envService = new EnvService(logger)
         const validator = new AppValidator()
         const eventMessageValidator = new EventMessageValidator(validator)
-        const eventMessageHandler = new EventMessageHandler(eventMessageValidator, asyncLocalStorage, logger)
+        const eventMessageHandler = new EventMessageHandler(
+            eventMessageValidator,
+            asyncLocalStorage,
+            logger,
+            systemServiceName,
+            metricsService,
+        )
 
         const externalEventListenerList = [
             new ReceiveEventListener(logger, receiveEventName),

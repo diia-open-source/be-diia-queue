@@ -208,11 +208,7 @@ export class AmqpListener {
             const response = this.prepareResponse(message, messageData, channel)
 
             try {
-                const result = await callback(response)
-
-                this.rabbitMQMetrics.collectResponseTotalMetric(startTime, eventName, source, this.systemServiceName)
-
-                return result
+                return await callback(response)
             } catch (callbackErr) {
                 const errorType = callbackErr instanceof ApiError ? callbackErr.getType() : ErrorType.Unoperated
 

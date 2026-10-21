@@ -47,7 +47,7 @@ describe('ExternalEventBus', () => {
 
     const validator = new AppValidator()
     const eventMessageValidator = new EventMessageValidator(validator)
-    const eventMessageHandler = new EventMessageHandler(eventMessageValidator, asyncLocalStorage, logger)
+    const eventMessageHandler = new EventMessageHandler(eventMessageValidator, asyncLocalStorage, logger, systemServiceName, metricsService)
 
     describe('migrate classic queue to quorum', () => {
         it('should successfully read message from two queues', async () => {
