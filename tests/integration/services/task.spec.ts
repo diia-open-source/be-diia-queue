@@ -9,10 +9,10 @@ import { HttpStatusCode, LogLevel } from '@diia-inhouse/types'
 import { AppValidator } from '@diia-inhouse/validators'
 
 import constants from '@src/constants'
-import { QueueContext, QueueTypes } from '@src/interfaces'
+import { QueueConnectionType, QueueContext, QueueTypes } from '@src/interfaces'
 import { EventMessageHandler, EventMessageValidator, Queue, Task } from '@src/services'
 
-import { getConfig } from '@mocks/config'
+import { getConfig, getRabbitMQConfig, getServiceRulesConfig } from '@mocks/config'
 import { makeMockMetricsService } from '@mocks/services/metricsService'
 import { TestTaskListener } from '@mocks/tasks'
 
@@ -71,6 +71,62 @@ describe('Delayed task', () => {
         expect(spiedHandler).toHaveBeenCalledOnce()
 
         expect(receivingTime - publishingTime >= delay).toBe(true)
+    })
+
+    it('should deliver a delayed task published by an instance with consumers disabled', async () => {
+        // Arrange
+        const taskName = 'TaskFromInstanceWithoutConsumers'
+        const declareOptions = { assertQueues: true, assertExchanges: true }
+
+        const consumingQueue = new Queue(systemServiceName, metricsService, defaultConfig, asyncLocalStorage, logger)
+        const consumingListener = new TestTaskListener(taskName)
+
+        const spiedHandler = vi.spyOn(consumingListener, 'handler').mockImplementation(async () => {
+            eventEmitter.emit(receivingEvent)
+        })
+
+        const consumingTask = new Task(
+            serviceName,
+            systemServiceName,
+            consumingQueue.makeInternalRabbitMQProvider('task'),
+            [consumingListener],
+            eventMessageHandler,
+            logger,
+            hostname,
+        )
+
+        const publishingQueue = new Queue(
+            systemServiceName,
+            metricsService,
+            {
+                serviceRulesConfig: getServiceRulesConfig(),
+                [QueueConnectionType.Internal]: { ...getRabbitMQConfig(declareOptions), consumerEnabled: false },
+            },
+            asyncLocalStorage,
+            logger,
+        )
+
+        const publishingTask = new Task(
+            serviceName,
+            systemServiceName,
+            publishingQueue.makeInternalRabbitMQProvider('task'),
+            [new TestTaskListener(taskName)],
+            eventMessageHandler,
+            logger,
+            hostname,
+        )
+
+        await consumingTask.onInit()
+        await publishingTask.onInit()
+
+        const receivingPromise = new Promise<void>((resolve) => eventEmitter.once(receivingEvent, resolve))
+
+        // Act
+        await publishingTask.publish(taskName, { text: '+++' }, 100)
+        await receivingPromise
+
+        // Assert
+        expect(spiedHandler).toHaveBeenCalledExactlyOnceWith({ text: '+++' }, expect.anything())
     })
 
     it('should fail to publish if isDelayed option is not specified', async () => {

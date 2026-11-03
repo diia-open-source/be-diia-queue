@@ -45,31 +45,7 @@ export class Task extends Communicator implements TaskQueue, OnInit {
         const exchangesOptionsMap = _.keyBy<ExchangeOptions>(exchangesOptions, 'name')
 
         for (const task of this.taskList) {
-            const { name: taskName, isDelayed = false, queueNames = [] } = task
-
-            if (queueNames.length === 0) {
-                const queueName = this.defineQueueNameByTaskName(taskName, isDelayed, queuesOptionsMap, exchangesOptionsMap)
-
-                queueNames.push(queueName)
-            }
-
-            const taskExchangesOptions: ExchangeOptions[] = []
-
-            for (const queueName of queueNames) {
-                const queueOptions = queuesOptionsMap[queueName]
-                if (!queueOptions) {
-                    this.logger.error(`Not found queue options by name (${queueName}) for task service`)
-                    continue
-                }
-
-                const { bindTo } = queueOptions
-
-                const options = this.defineExchangesOptions(queueName, isDelayed, bindTo, exchangesOptionsMap)
-
-                taskExchangesOptions.push(...options)
-            }
-
-            this.taskNameExchangesOptionsMap.set(taskName, taskExchangesOptions)
+            this.taskNameExchangesOptionsMap.set(task.name, this.defineTaskExchangesOptions(task, queuesOptionsMap, exchangesOptionsMap))
         }
     }
 
@@ -99,7 +75,12 @@ export class Task extends Communicator implements TaskQueue, OnInit {
     }
 
     protected getProducerExchangesOptions(): ExchangeOptions[] {
-        return []
+        const { queuesOptions, exchangesOptions } = this.queueProvider.getMessageBrokerServiceConfig()
+
+        const queuesOptionsMap = _.keyBy<QueueOptions>(queuesOptions, 'name')
+        const exchangesOptionsMap = _.keyBy<ExchangeOptions>(exchangesOptions, 'name')
+
+        return this.taskList.flatMap((task) => this.defineTaskExchangesOptions(task, queuesOptionsMap, exchangesOptionsMap))
     }
 
     protected getMulticastListeners(): MessageBrokerServiceListener[] {
@@ -149,6 +130,33 @@ export class Task extends Communicator implements TaskQueue, OnInit {
 
     protected getExchangeNameWithSuffix(taskName: string): string {
         return this.getQueueName(taskName)
+    }
+
+    private defineTaskExchangesOptions(
+        task: TaskListener,
+        queuesOptionsMap: Record<string, QueueOptions>,
+        exchangesOptionsMap: Record<ExchangeName, ExchangeOptions>,
+    ): ExchangeOptions[] {
+        const { name: taskName, isDelayed = false, queueNames = [] } = task
+
+        const taskQueueNames =
+            queueNames.length > 0
+                ? queueNames
+                : [this.defineQueueNameByTaskName(taskName, isDelayed, queuesOptionsMap, exchangesOptionsMap)]
+
+        const taskExchangesOptions: ExchangeOptions[] = []
+
+        for (const queueName of taskQueueNames) {
+            const queueOptions = queuesOptionsMap[queueName]
+            if (!queueOptions) {
+                this.logger.error(`Not found queue options by name (${queueName}) for task service`)
+                continue
+            }
+
+            taskExchangesOptions.push(...this.defineExchangesOptions(queueName, isDelayed, queueOptions.bindTo, exchangesOptionsMap))
+        }
+
+        return taskExchangesOptions
     }
 
     private defineExchangesOptions(
