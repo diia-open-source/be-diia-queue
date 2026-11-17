@@ -1,7 +1,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
 import { randomBytes } from 'node:crypto'
 
-import { context as otelContext, isValidTraceId, propagation, trace } from '@opentelemetry/api'
+import { isValidTraceId, context as otelContext, propagation, trace } from '@opentelemetry/api'
 
 import Logger from '@diia-inhouse/diia-logger'
 import { MetricsService } from '@diia-inhouse/diia-metrics'

@@ -14,8 +14,12 @@ import { QueueName } from '../../interfaces/queueConfig/index.js'
 import { totalListenerChannelErrorsMetric } from '../../metrics/index.js'
 import RabbitMQMetricsService from '../../services/metrics.js'
 import { AmqpConnection } from './amqpConnection.js'
+import { AmqpMessageReader } from './amqpMessageReader.js'
+import { ReplyToQueueName } from './amqpPublisher.types.js'
 
 export class AmqpListener {
+    private readonly amqpMessageReader = new AmqpMessageReader()
+
     private readonly infiniteRecreateChannelTriesCount = 0
 
     private readonly defaultRecreateChannelOptions: RecreateChannelOptions = {
@@ -117,6 +121,7 @@ export class AmqpListener {
 
         const callback = this.onMessageCallback(queueName, channel, consumerOptions)
 
+        channel.on('return', (returned: Message) => this.collectUnroutedMessage(returned))
         channel.on('error', async (err) => {
             totalListenerChannelErrorsMetric.increment({ queueName })
             this.logger.warn('Recreating listener channel because an error has been occurred', { err, queueName })
@@ -256,7 +261,7 @@ export class AmqpListener {
     }
 
     private prepareResponse(message: ConsumeMessage, messageData: QueueMessageData, channel: Channel): QueueMessage {
-        const done = (data?: QueueMessageData): void => this.finishResponseProcessing(message, channel, data)
+        const done = (data?: QueueMessageData): void => this.finishResponseProcessing(message, channel, data, messageData.event)
 
         return {
             done,
@@ -269,22 +274,27 @@ export class AmqpListener {
         }
     }
 
-    private finishResponseProcessing(message: ConsumeMessage, channel: Channel, data?: QueueMessageData): void {
+    private finishResponseProcessing(message: ConsumeMessage, channel: Channel, data?: QueueMessageData, event?: string): void {
         const { replyTo, correlationId } = message.properties
 
         if (data && replyTo && correlationId) {
             const json = JSON.stringify(data)
             const content = Buffer.from(json)
 
+            const routingKey = replyTo
+
+            const isDirectReplyTo = routingKey.startsWith(ReplyToQueueName)
+
             const options: Options.Publish = {
                 correlationId,
+                ...(isDirectReplyTo ? {} : { mandatory: true }),
                 headers: {
                     [Headers.handledBy]: this.systemServiceName,
+                    ...(event ? { [Headers.event]: event } : {}),
                 },
             }
 
             const exchangeName = ''
-            const routingKey = replyTo
 
             channel.publish(exchangeName, routingKey, content, options)
         } else if (!data && replyTo && correlationId) {
@@ -292,6 +302,21 @@ export class AmqpListener {
         }
 
         this.ackMsg(channel, message)
+    }
+
+    private collectUnroutedMessage(message: Message): void {
+        try {
+            const unrouted = this.amqpMessageReader.readUnrouted(message)
+            if (!unrouted) {
+                return
+            }
+
+            const { exchangeName, event, routingKey } = unrouted
+
+            this.rabbitMQMetrics.collectUnroutedMessageMetric(exchangeName, event, routingKey)
+        } catch (err) {
+            this.logger.error('Error while collecting unrouted message', { err, message })
+        }
     }
 
     private getConsumerOptions(queueName: QueueName): ConsumerOptions | undefined {

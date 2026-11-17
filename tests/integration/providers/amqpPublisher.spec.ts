@@ -103,4 +103,209 @@ describe('AmqpPublisher', () => {
             await expect(publishToExistExchangePromise).rejects.toBeInstanceOf(ExternalCommunicatorError)
         })
     })
+
+    describe(`method ${AmqpPublisher.prototype.publishToExchange.name}`, () => {
+        it('should count a message that no queue is bound to receive', async (context) => {
+            // Arrange
+            const collectUnroutedMessageMetric = vi.spyOn(rabbitmqMetricsService, 'collectUnroutedMessageMetric')
+            const publisher = new AmqpPublisher(defaultAmqpConnection, logger, rabbitmqMetricsService, systemServiceName)
+
+            await publisher.init()
+
+            const exchangeOptions: ExchangeOptions = getExchangeOptions({
+                name: `TestUnroutedExchange-${context.task.name}`,
+                options: {
+                    durable: true,
+                },
+            })
+
+            const { name: exchangeName } = exchangeOptions
+            const routingKey = 'test-routing-key'
+            const eventName = 'test-event'
+            const message = getMsgData(eventName, { data: 'test' })
+            const headers: MessageHeaders = { traceId: 'test-trace-id' }
+
+            try {
+                await asserter.init()
+                await asserter.deleteExchange(exchangeName)
+            } catch {
+                // not need to check an error because we just recreate an exchange
+            }
+
+            await asserter.init([exchangeOptions])
+
+            try {
+                // Act
+                await publisher.publishToExchange(exchangeName, message, headers, routingKey)
+
+                // Assert
+                await vi.waitFor(() => {
+                    expect(collectUnroutedMessageMetric).toHaveBeenCalledTimes(1)
+                    expect(collectUnroutedMessageMetric).toHaveBeenCalledWith(exchangeName, eventName, routingKey)
+                })
+            } finally {
+                collectUnroutedMessageMetric.mockRestore()
+                await asserter.deleteExchange(exchangeName)
+            }
+        })
+
+        it('should not count a message that a queue is bound to receive', async (context) => {
+            // Arrange
+            const collectUnroutedMessageMetric = vi.spyOn(rabbitmqMetricsService, 'collectUnroutedMessageMetric')
+            const publisher = new AmqpPublisher(defaultAmqpConnection, logger, rabbitmqMetricsService, systemServiceName)
+
+            await publisher.init()
+
+            const exchangeOptions: ExchangeOptions = getExchangeOptions({
+                name: `TestRoutedExchange-${context.task.name}`,
+                options: {
+                    durable: true,
+                },
+            })
+
+            const { name: exchangeName } = exchangeOptions
+            const routingKey = 'test-routing-key'
+            const queueOptions = getQueueOptions({
+                name: `TestRoutedQueue-${context.task.name}`,
+                bindTo: [
+                    {
+                        bind: true,
+                        routingKey,
+                        exchangeName,
+                    },
+                ],
+            })
+
+            const { name: queueName } = queueOptions
+            const eventName = 'test-event'
+            const message = getMsgData(eventName, { data: 'test' })
+            const headers: MessageHeaders = { traceId: 'test-trace-id' }
+
+            try {
+                await asserter.init()
+                await asserter.deleteQueue(queueName)
+                await asserter.deleteExchange(exchangeName)
+            } catch {
+                // not need to check an error because we just recreate a queue
+            }
+
+            await asserter.init([exchangeOptions], [queueOptions])
+
+            try {
+                // Act
+                await publisher.publishToExchange(exchangeName, message, headers, routingKey)
+
+                // A return arrives after publish, so wait out the same window the unrouted test uses.
+                await setTimeout(1000)
+
+                // Assert
+                expect(collectUnroutedMessageMetric).not.toHaveBeenCalled()
+            } finally {
+                collectUnroutedMessageMetric.mockRestore()
+                await asserter.deleteQueue(queueName)
+                await asserter.deleteExchange(exchangeName)
+            }
+        })
+
+        it('should not count a delayed message returned while it is still parked', async (context) => {
+            // Arrange
+            const collectUnroutedMessageMetric = vi.spyOn(rabbitmqMetricsService, 'collectUnroutedMessageMetric')
+            const publisher = new AmqpPublisher(defaultAmqpConnection, logger, rabbitmqMetricsService, systemServiceName)
+
+            await publisher.init()
+
+            const exchangeOptions: ExchangeOptions = getExchangeOptions({
+                name: `TestDelayedExchange-${context.task.name}`,
+                delayed: true,
+                options: {
+                    durable: true,
+                },
+            })
+
+            const { name: exchangeName } = exchangeOptions
+            const routingKey = 'test-routing-key'
+            const queueOptions = getQueueOptions({
+                name: `TestDelayedQueue-${context.task.name}`,
+                bindTo: [
+                    {
+                        bind: true,
+                        routingKey,
+                        exchangeName,
+                    },
+                ],
+            })
+
+            const { name: queueName } = queueOptions
+            const message = getMsgData('test-event', { data: 'test' })
+            const headers: MessageHeaders = { traceId: 'test-trace-id', 'x-delay': 5000 }
+
+            try {
+                await asserter.init()
+                await asserter.deleteQueue(queueName)
+                await asserter.deleteExchange(exchangeName)
+            } catch {
+                // not need to check an error because we just recreate a queue
+            }
+
+            await asserter.init([exchangeOptions], [queueOptions])
+
+            try {
+                // Act
+                await publisher.publishToExchange(exchangeName, message, headers, routingKey)
+
+                // The delayed exchange returns the message immediately, before the delay elapses.
+                await setTimeout(1000)
+
+                // Assert
+                expect(collectUnroutedMessageMetric).not.toHaveBeenCalled()
+            } finally {
+                collectUnroutedMessageMetric.mockRestore()
+                await asserter.deleteQueue(queueName)
+                await asserter.deleteExchange(exchangeName)
+            }
+        })
+
+        it('should not count a delayed message that no queue is bound to receive', async (context) => {
+            // Arrange
+            const collectUnroutedMessageMetric = vi.spyOn(rabbitmqMetricsService, 'collectUnroutedMessageMetric')
+            const publisher = new AmqpPublisher(defaultAmqpConnection, logger, rabbitmqMetricsService, systemServiceName)
+
+            await publisher.init()
+
+            const exchangeOptions: ExchangeOptions = getExchangeOptions({
+                name: `TestDelayedUnroutedExchange-${context.task.name}`,
+                delayed: true,
+                options: {
+                    durable: true,
+                },
+            })
+
+            const { name: exchangeName } = exchangeOptions
+            const routingKey = 'test-routing-key'
+            const message = getMsgData('test-event', { data: 'test' })
+            const headers: MessageHeaders = { traceId: 'test-trace-id', 'x-delay': 500 }
+
+            try {
+                await asserter.init()
+                await asserter.deleteExchange(exchangeName)
+            } catch {
+                // not need to check an error because we just recreate an exchange
+            }
+
+            await asserter.init([exchangeOptions])
+
+            try {
+                // Act
+                await publisher.publishToExchange(exchangeName, message, headers, routingKey)
+
+                await setTimeout(1000)
+
+                // Assert
+                expect(collectUnroutedMessageMetric).not.toHaveBeenCalled()
+            } finally {
+                collectUnroutedMessageMetric.mockRestore()
+                await asserter.deleteExchange(exchangeName)
+            }
+        })
+    })
 })

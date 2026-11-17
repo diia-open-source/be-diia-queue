@@ -3,6 +3,8 @@ import { MessagePropertyHeaders, Options } from 'amqplib'
 import { PublishMessageOptions } from '../../interfaces/options.js'
 import { Headers } from '../../interfaces/providers/rabbitmq/index.js'
 
+export const ReplyToQueueName = 'amq.rabbitmq.reply-to'
+
 export type MessagePayload = unknown
 
 export interface MessageHeaders {

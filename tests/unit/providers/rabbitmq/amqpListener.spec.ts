@@ -15,7 +15,7 @@ import { logger } from '@tests/unit/mocks'
 import { ConnectionStatus, QueueOptions } from '@interfaces/index'
 
 import { Headers } from '../../../../src/interfaces/providers/rabbitmq'
-import { validMessage } from '../../../mocks/providers/rabbitmq/amqpListener'
+import { getConsumeMessageMock, validMessage } from '../../../mocks/providers/rabbitmq/amqpListener'
 
 const channelMock = {
     assertQueue: vi.fn(),
@@ -179,13 +179,18 @@ describe('AmqpListener', () => {
             const amqpListener = new AmqpListener(amqpConnection, logger, metricsService, defaultQueuesOptions, systemServiceName)
 
             const data = { key: 'value' }
+            const event = 'test-event'
+            const message = {
+                ...validMessage,
+                content: Buffer.from(JSON.stringify({ event, key: 'value' })),
+            }
 
             connectionMock.createChannel.mockResolvedValue(new MockChannel())
             callback.mockImplementationOnce((response) => {
                 response.done(data)
             })
             sendMessageMock.mockImplementationOnce((onMessageCallback) => {
-                onMessageCallback(validMessage)
+                onMessageCallback(message)
             })
 
             // Act
@@ -193,19 +198,78 @@ describe('AmqpListener', () => {
 
             // Assert
             const expectedPublishOptions: Options.Publish = {
-                correlationId: validMessage.properties.correlationId,
+                correlationId: message.properties.correlationId,
+                mandatory: true,
                 headers: {
                     [Headers.handledBy]: systemServiceName,
+                    [Headers.event]: event,
                 },
             }
 
             expect(channelMock.publish).toHaveBeenCalledWith(
                 '',
-                validMessage.properties.replyTo,
+                message.properties.replyTo,
                 Buffer.from(JSON.stringify(data)),
                 expectedPublishOptions,
             )
-            expect(channelMock.ack).toHaveBeenCalledWith(validMessage, false)
+            expect(channelMock.ack).toHaveBeenCalledWith(message, false)
+        })
+
+        it('should publish a direct reply-to response without mandatory', async () => {
+            // Arrange
+            const callback = vi.fn()
+            const amqpConnection = new Connection() as unknown as AmqpConnection
+            const amqpListener = new AmqpListener(amqpConnection, logger, metricsService, defaultQueuesOptions, systemServiceName)
+            const message = getConsumeMessageMock({ replyTo: 'amq.rabbitmq.reply-to.g2dkAAAB' })
+            const data = { key: 'value' }
+
+            connectionMock.createChannel.mockResolvedValue(new MockChannel())
+            callback.mockImplementationOnce((response) => {
+                response.done(data)
+            })
+            sendMessageMock.mockImplementationOnce((onMessageCallback) => {
+                onMessageCallback(message)
+            })
+
+            // Act
+            await amqpListener.listenQueue(defaultQueueName, callback)
+
+            // Assert
+            expect(channelMock.publish).toHaveBeenCalledWith('', message.properties.replyTo, Buffer.from(JSON.stringify(data)), {
+                correlationId: message.properties.correlationId,
+                headers: {
+                    [Headers.handledBy]: systemServiceName,
+                },
+            })
+        })
+
+        it('should count an unrouted reply and collapse a direct reply-to routing key', async () => {
+            // Arrange
+            const collectUnroutedMessageMetric = vi.spyOn(metricsService, 'collectUnroutedMessageMetric')
+            const channel = new MockChannel()
+            const amqpConnection = new Connection() as unknown as AmqpConnection
+            const amqpListener = new AmqpListener(amqpConnection, logger, metricsService, defaultQueuesOptions, systemServiceName)
+
+            connectionMock.createChannel.mockResolvedValue(channel)
+
+            await amqpListener.listenQueue(defaultQueueName, async () => {})
+
+            // Act
+            channel.emit('return', {
+                content: Buffer.from(JSON.stringify({ key: 'value' })),
+                fields: {
+                    exchange: '',
+                    routingKey: 'amq.rabbitmq.reply-to.g2dkAAAB',
+                },
+                properties: {
+                    headers: {
+                        [Headers.event]: 'test-event',
+                    },
+                },
+            })
+
+            // Assert
+            expect(collectUnroutedMessageMetric).toHaveBeenCalledWith('default', 'test-event', 'amq.rabbitmq.reply-to')
         })
 
         it('should successfully handle message in case there is no data in message', async () => {

@@ -25,11 +25,12 @@ import { makeMockRabbitMQMetricsService } from '@tests/mocks/services/metricsSer
 import { logger } from '@tests/unit/mocks'
 
 import { getExpectedMsgData, validMessage, validPublishToExchangeParams } from '../../../mocks/providers/rabbitmq/amqpPublisher'
+import { UnroutedMessageTestCase } from './amqpPublisher.types'
 
 vi.mock('node:crypto', () => ({ randomUUID: vi.fn() }))
 
 describe('AmqpPublisher', () => {
-    const metricsService = makeMockRabbitMQMetricsService()
+    const metricsService = makeMockRabbitMQMetricsService(undefined)
 
     const systemServiceName = 'test-service-name'
     const defaultPublisherOpts: PublisherOptions = {}
@@ -707,6 +708,118 @@ describe('AmqpPublisher', () => {
                     'outbound',
                 )
             })
+        })
+    })
+
+    describe('unrouted messages', () => {
+        it.each<UnroutedMessageTestCase>([
+            {
+                description: 'event from the returned body',
+                content: JSON.stringify(defaultMessage),
+                event: defaultEventName,
+            },
+            {
+                description: 'event from the reply header before the body',
+                content: JSON.stringify({ event: 'body-event' }),
+                event: 'header-event',
+                headers: { [Headers.event]: 'header-event' },
+            },
+            {
+                description: 'missing event when the body is not a message',
+                content: 'not-json',
+            },
+            {
+                description: 'default label for the default exchange',
+                content: JSON.stringify(defaultMessage),
+                event: defaultEventName,
+                exchange: '',
+                expectedExchangeName: 'default',
+            },
+            {
+                description: 'direct reply-to routing key without the channel suffix',
+                content: JSON.stringify(defaultMessage),
+                event: defaultEventName,
+                routingKey: 'amq.rabbitmq.reply-to.g2dkAAAB',
+                expectedRoutingKey: 'amq.rabbitmq.reply-to',
+            },
+            {
+                description: 'x-delay 0 because the plugin routes it immediately',
+                content: JSON.stringify(defaultMessage),
+                event: defaultEventName,
+                headers: { 'x-delay': 0 },
+            },
+        ])(
+            'should count a returned message with $description',
+            async ({
+                content,
+                event,
+                exchange = defaultExchangeName,
+                expectedExchangeName = exchange,
+                routingKey = defaultRoutingKey,
+                expectedRoutingKey = routingKey,
+                headers,
+            }) => {
+                // Arrange
+                const amqpConnection = new AmqpConnectionMock() as unknown as AmqpConnection
+                const amqpPublisher = new AmqpPublisher(amqpConnection, logger, metricsService, systemServiceName, defaultPublisherOpts)
+                const collectUnroutedMessageMetric = vi.spyOn(metricsService, 'collectUnroutedMessageMetric')
+
+                const rpcChannel = new ChannelMock()
+                const regularChannel = new ChannelMock()
+
+                connectionMock.createChannel.mockResolvedValueOnce(rpcChannel).mockResolvedValueOnce(regularChannel)
+
+                await amqpPublisher.init()
+
+                const returnedMessage = {
+                    content: Buffer.from(content),
+                    fields: {
+                        exchange,
+                        routingKey,
+                    },
+                    properties: { headers },
+                }
+
+                // Act
+                regularChannel.emit('return', returnedMessage)
+                rpcChannel.emit('return', returnedMessage)
+
+                // Assert
+                expect(collectUnroutedMessageMetric).toHaveBeenCalledTimes(2)
+                expect(collectUnroutedMessageMetric).toHaveBeenCalledWith(expectedExchangeName, event, expectedRoutingKey)
+            },
+        )
+
+        it('should ignore a returned message parked by x-delay', async () => {
+            // Arrange
+            const amqpConnection = new AmqpConnectionMock() as unknown as AmqpConnection
+            const amqpPublisher = new AmqpPublisher(amqpConnection, logger, metricsService, systemServiceName, defaultPublisherOpts)
+            const collectUnroutedMessageMetric = vi.spyOn(metricsService, 'collectUnroutedMessageMetric')
+
+            const regularChannel = new ChannelMock()
+
+            connectionMock.createChannel.mockResolvedValueOnce(new ChannelMock()).mockResolvedValueOnce(regularChannel)
+
+            await amqpPublisher.init()
+
+            const returnedMessage = {
+                content: Buffer.from(JSON.stringify(defaultMessage)),
+                fields: {
+                    exchange: defaultExchangeName,
+                    routingKey: defaultRoutingKey,
+                },
+                properties: {
+                    headers: {
+                        'x-delay': 1000,
+                    },
+                },
+            }
+
+            // Act
+            regularChannel.emit('return', returnedMessage)
+
+            // Assert
+            expect(collectUnroutedMessageMetric).not.toHaveBeenCalled()
         })
     })
 })

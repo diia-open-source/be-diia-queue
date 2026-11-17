@@ -102,6 +102,7 @@ export interface ExportConfig {
 export const Headers = {
     sentFrom: 'sent-from',
     handledBy: 'handled-by',
+    event: 'event',
 } as const
 
 export class NackOptions {

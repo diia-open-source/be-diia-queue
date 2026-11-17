@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { EventEmitter } from 'node:events'
 
-import { Channel, ConsumeMessage, Options } from 'amqplib'
+import { Channel, ConsumeMessage, Message, Options } from 'amqplib'
 
 import { ErrorType, ExternalCommunicatorError, InternalServerError } from '@diia-inhouse/errors'
 import { HttpStatusCode, Logger } from '@diia-inhouse/types'
@@ -14,11 +14,14 @@ import { ConnectionStatus } from '../../interfaces/providers/rabbitmq/amqpConnec
 import { Headers, QueueMessageData } from '../../interfaces/providers/rabbitmq/index.js'
 import RabbitMQMetricsService from '../../services/metrics.js'
 import { AmqpConnection } from './amqpConnection.js'
-import { AmqpPublisherPublishOptions, DirectResponse, MessageHeaders, PublishingResult } from './amqpPublisher.types.js'
+import { AmqpMessageReader } from './amqpMessageReader.js'
+import { AmqpPublisherPublishOptions, DirectResponse, MessageHeaders, PublishingResult, ReplyToQueueName } from './amqpPublisher.types.js'
 
-const { APP_ID, DEFAULT_ROUTING_KEY, REPLY_TO_QUEUE_NAME } = constants
+const { APP_ID, DEFAULT_ROUTING_KEY } = constants
 
 export class AmqpPublisher {
+    private readonly amqpMessageReader = new AmqpMessageReader()
+
     private readonly defaultPublishOptions: Options.Publish = {
         contentEncoding: 'utf-8',
         contentType: 'application/json',
@@ -37,7 +40,7 @@ export class AmqpPublisher {
 
     private regularChannel?: Channel
 
-    private readonly replyToQueueName: string = REPLY_TO_QUEUE_NAME
+    private readonly replyToQueueName: string = ReplyToQueueName
 
     private eventEmitter?: EventEmitter
 
@@ -56,7 +59,7 @@ export class AmqpPublisher {
     ) {
         this.publishTimeout = options.publishTimeout ?? this.publishTimeout
         this.directResponseTimeout = options.directResponseTimeout ?? options.timeout ?? this.directResponseTimeout
-        this.replyToQueueName = options.replyToQueueName ?? REPLY_TO_QUEUE_NAME
+        this.replyToQueueName = options.replyToQueueName ?? ReplyToQueueName
     }
 
     async init(): Promise<void> {
@@ -151,10 +154,12 @@ export class AmqpPublisher {
 
     private async createRegularChannel(): Promise<void> {
         this.regularChannel = await this.connection.createChannel()
+        this.regularChannel?.on('return', (message: Message) => this.collectUnroutedMessage(message))
     }
 
     private async createRpcChannel(): Promise<void> {
         this.rpcChannel = await this.connection.createChannel(this.replyToQueueName)
+        this.rpcChannel?.on('return', (message: Message) => this.collectUnroutedMessage(message))
         this.rpcChannel?.on('error', async () => await this.createRpcChannel())
 
         this.eventEmitter = new EventEmitter()
@@ -163,6 +168,21 @@ export class AmqpPublisher {
         const consumeOptions: Options.Consume = { noAck: true }
 
         await this.rpcChannel?.consume(this.replyToQueueName, this.listenReplyToQueue.bind(this), consumeOptions)
+    }
+
+    private collectUnroutedMessage(message: Message): void {
+        try {
+            const unrouted = this.amqpMessageReader.readUnrouted(message)
+            if (!unrouted) {
+                return
+            }
+
+            const { exchangeName, event, routingKey } = unrouted
+
+            this.rabbitMQMetrics.collectUnroutedMessageMetric(exchangeName, event, routingKey)
+        } catch (err) {
+            this.logger.error('Error while collecting unrouted message', { err, message })
+        }
     }
 
     private listenReplyToQueue(msg: ConsumeMessage | null): void {

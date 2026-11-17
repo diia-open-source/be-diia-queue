@@ -1,7 +1,15 @@
 import { Counter, MetricsService, RequestMechanism, RequestStatus, TotalRequestsLabelsMap } from '@diia-inhouse/diia-metrics'
 import { ErrorType } from '@diia-inhouse/errors'
 
-import { CommunicationDirection, CommunicationsTotalLabelsMap, Metrics, communicationsTotalLabelsMap } from '../interfaces/metrics/index.js'
+import {
+    CommunicationDirection,
+    CommunicationsTotalLabelsMap,
+    LabelUnknown,
+    Metrics,
+    UnroutedMessagesLabelsMap,
+    communicationsTotalLabelsMap,
+    unroutedMessagesLabelsMap,
+} from '../interfaces/metrics/index.js'
 
 export default class RabbitMQMetricsService {
     private readonly communicationsTotalMetric = new Counter<CommunicationsTotalLabelsMap>(
@@ -10,7 +18,13 @@ export default class RabbitMQMetricsService {
         'Total rabbitmq communications made by service',
     )
 
-    constructor(private metrics: MetricsService) {}
+    private readonly unroutedMessagesTotalMetric = new Counter<UnroutedMessagesLabelsMap>(
+        Metrics.UnroutedMessagesTotal,
+        unroutedMessagesLabelsMap,
+        'Total rabbitmq messages returned because no queue was bound, excluding delayed messages the broker returns while they are still parked',
+    )
+
+    constructor(private readonly metrics: MetricsService) {}
 
     collectResponseTotalMetric(startTime: bigint, route: string, source: string, destination: string, errorType?: ErrorType): void | never {
         const labels: TotalRequestsLabelsMap = {
@@ -44,6 +58,16 @@ export default class RabbitMQMetricsService {
         }
 
         this.communicationsTotalMetric.increment(labels, 1)
+    }
+
+    collectUnroutedMessageMetric(exchangeName: string, event?: string, routingKey?: string): void {
+        const labels: UnroutedMessagesLabelsMap = {
+            exchangeName: exchangeName,
+            event: event || LabelUnknown,
+            routingKey: routingKey || LabelUnknown,
+        }
+
+        this.unroutedMessagesTotalMetric.increment(labels, 1)
     }
 
     collectRequestTotalMetric(startTime: bigint, route: string, source: string, destination: string, errorType?: ErrorType): void {
