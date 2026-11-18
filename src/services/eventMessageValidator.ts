@@ -1,4 +1,4 @@
-import { AppValidator, ValidationSchema } from '@diia-inhouse/validators'
+import { AppValidator, ArrayRule, ValidationSchema } from '@diia-inhouse/validators'
 
 import { QueueMessageData } from '../interfaces/providers/rabbitmq/index.js'
 
@@ -23,7 +23,7 @@ export class EventMessageValidator {
         this.validator.validate(data, validationSchema)
     }
 
-    validateSyncedEventMessage(data: QueueMessageData, responseValidationSchema?: ValidationSchema): void | never {
+    validateSyncedEventMessage(data: QueueMessageData, responseValidationSchema?: ValidationSchema | ArrayRule): void | never {
         const validation: ValidationSchema = {
             uuid: { type: 'uuid' },
             error: {
@@ -36,10 +36,17 @@ export class EventMessageValidator {
                 },
             },
         }
+
         if (responseValidationSchema) {
-            validation.response = { type: 'object', optional: true, props: responseValidationSchema }
+            validation.response = this.isArrayRule(responseValidationSchema)
+                ? { optional: true, ...responseValidationSchema }
+                : { type: 'object', optional: true, props: responseValidationSchema }
         }
 
         this.validateEventMessage(data, validation)
+    }
+
+    private isArrayRule(schema: ValidationSchema | ArrayRule): schema is ArrayRule {
+        return 'type' in schema && schema.type === 'array'
     }
 }

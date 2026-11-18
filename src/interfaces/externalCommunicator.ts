@@ -1,5 +1,5 @@
 import { HttpStatusCode } from '@diia-inhouse/types'
-import { ValidationSchema } from '@diia-inhouse/validators'
+import { ArrayRule, ValidationSchema } from '@diia-inhouse/validators'
 
 import { ExchangeName } from './messageBrokerServiceConfig.js'
 
@@ -25,7 +25,7 @@ export interface ReceiveDirectOps {
      *
      * Null is acceptable only for legacy use cases.
      */
-    validationRules: ValidationSchema | null
+    validationRules: ValidationSchema | ArrayRule | null
     /** Bypass response caching on the subscriber side if configured. */
     ignoreCache?: boolean
     /**

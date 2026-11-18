@@ -1,3 +1,5 @@
+import { RandomUtils } from '@diia-inhouse/utils'
+
 import { EventMessageValidator, QueueMessageData } from '@src/index'
 
 import { appValidator } from '../mocks'
@@ -46,7 +48,8 @@ describe('EventMessageValidator', () => {
                     date,
                 },
                 payload: {
-                    key: 'value',
+                    uuid: RandomUtils.generateUUID(),
+                    response: {},
                 },
             }
 
@@ -72,6 +75,52 @@ describe('EventMessageValidator', () => {
                             },
                         },
                         response: { type: 'object', optional: true, props: {} },
+                    },
+                },
+                meta: {
+                    type: 'object',
+                    props: {
+                        date: { type: 'date', convert: true },
+                        traceId: { type: 'string', optional: true },
+                    },
+                },
+            })
+        })
+
+        it('should successfully validate event message with array response', () => {
+            const message: QueueMessageData = {
+                event: 'event',
+                meta: {
+                    date,
+                },
+                payload: {
+                    uuid: RandomUtils.generateUUID(),
+                    response: ['string1', 'string2'],
+                },
+            }
+
+            const spy = vi.spyOn(appValidator, 'validate')
+
+            eventMessageValidator.validateSyncedEventMessage(message, { type: 'array', items: { type: 'string' } })
+
+            expect(spy).toHaveBeenCalledWith(message, {
+                event: {
+                    type: 'string',
+                },
+                payload: {
+                    type: 'object',
+                    props: {
+                        uuid: { type: 'uuid' },
+                        error: {
+                            type: 'object',
+                            optional: true,
+                            props: {
+                                http_code: { type: 'number' },
+                                message: { type: 'string', optional: true },
+                                data: { type: 'object', optional: true },
+                            },
+                        },
+                        response: { type: 'array', optional: true, items: { type: 'string' } },
                     },
                 },
                 meta: {
